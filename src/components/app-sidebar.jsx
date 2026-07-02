@@ -258,6 +258,12 @@ const NAVIGATION_CONFIG = {
       icon: Blocks,
       isActive: false,
     },
+    BANNER_REPORT: {
+      title: "Banner Report",
+      url: "/banner-report",
+      isActive: false,
+      icon: Package,
+    },
     PROMOTERDASHBOARD: {
       title: "Promoter Dashboard",
       url: "/dashboard-promoter",
@@ -363,6 +369,7 @@ const USER_ROLE_PERMISSIONS = {
       "FOLDER",
       "MULTIALLOTMENT",
       "WRONGALLOTMENT",
+      "BANNER_REPORT",
       "PROMOTERDASHBOARD",
     ],
   },

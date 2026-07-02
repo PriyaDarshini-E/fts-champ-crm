@@ -155,6 +155,8 @@ export const REAPEAT_DONOR_EDIT_UPDATE_NEXT = `/api/update-repeated-donor`;
 // export const SCHOOL_ALLOT_LIST = `/api/fetch-school-allot`;
 export const SCHOOL_ALLOT_LIST = `/api/school-alloted-list`;
 export const SCHOOL_ALLOT_MULTI_LIST = `/api/school-alloted-list-multi`;
+export const BANNER_REPORT_LIST =`/api/fetch-banner-report`;
+export const DOWNLOAD_BANNER_REPORT=`/api/download-banner-report`;
 
 // export const FETCH_SCHOOL_ALLOT_LIST = `/api/fetch-schoolsallot-by-id`;
 export const FETCH_SCHOOL_ALLOT_LIST = `/api/school-allotment`;
