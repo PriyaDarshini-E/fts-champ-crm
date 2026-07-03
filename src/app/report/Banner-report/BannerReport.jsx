@@ -58,7 +58,6 @@ const BannerReport = () => {
     setGlobalFilter(debouncedSearchTerm);
   }, [debouncedSearchTerm]);
 
-  // Fetch data – no page param, only search
   const {
     data: bannerData,
     isError,

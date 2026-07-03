@@ -365,6 +365,7 @@ const DonorIndiviusalCreate = () => {
       formData.append("title", donor.title);
       formData.append("indicomp_is_promoter", donor.indicomp_is_promoter);
       formData.append("indicomp_type", donor.indicomp_type);
+      formData.append("indicomp_pan_no", donor.indicomp_pan_no);
       formData.append("indicomp_father_name", donor.indicomp_father_name);
       formData.append("indicomp_mother_name", donor.indicomp_mother_name);
       formData.append("indicomp_gender", donor.indicomp_gender);
