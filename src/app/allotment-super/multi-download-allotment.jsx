@@ -3,6 +3,8 @@ import {
   SCHOOL_ALLOT_MULTI_LIST,
   SCHOOL_ALLOTMENT_MULTI,
   SCHOOL_ALLOTMENT_MULTI_WITHOUT_HEADER,
+  SCHOOL_ALLOTMENT_OLD_MULTI_WITH_HEADER,
+  SCHOOL_ALLOTMENT_OLD_MULTI_WITHOUT_HEADER,
 } from "@/api";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,7 +41,7 @@ const MultiDownloadAllotment = () => {
   const location = useLocation();
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
-  // const [range, setRange] = useState({ from_id: "", to_id: "" });
+
   const [sorting, setSorting] = useState([]);
   const [columnFilters, setColumnFilters] = useState([]);
   const [columnVisibility, setColumnVisibility] = useState({});
@@ -50,6 +52,13 @@ const MultiDownloadAllotment = () => {
   const [isDownloadingWithoutHeader, setIsDownloadingWithoutHeader] =
     useState(false);
   const [isDownloadingWithHeader, setIsDownloadingWithHeader] = useState(false);
+  ///old
+  //for old-download-school-alloted-multi//SCHOOL_ALLOTMENT_OLD_MULTI_WITH_HEADER
+  const [isDownloadingOldWithHeader, setIsDownloadingOldWithHeader] =
+    useState(false);
+
+  const [isDownloadingOldWithoutHeader, setIsDownloadingOldWithoutHeader] =
+    useState(false);
 
   // Debounce search
   useEffect(() => {
@@ -213,7 +222,70 @@ const MultiDownloadAllotment = () => {
   });
 
   // Download handlers (unchanged)
-  const handleDownload = async () => {
+
+  const count = schoolData?.data?.length || 0;
+  useEffect(() => {
+    if (schoolData?.data?.length) {
+      const data = schoolData.data;
+      setFromId(data[data.length - 1]?.id || "");
+      setToId(data[0]?.id || "");
+    }
+  }, [schoolData]);
+  const [fromId, setFromId] = useState(
+    schoolData?.data?.[schoolData.data.length - 1]?.id || "",
+  );
+  const [toId, setToId] = useState(schoolData?.data?.[0]?.id || "");
+
+  const handleDownloadWithoutHeader = async () => {
+    const selectedRows = table.getSelectedRowModel().rows;
+    if (selectedRows.length === 0) {
+      toast.warning("Please select at least one row to download.");
+      return;
+    }
+
+    const ids = selectedRows.map((row) => row.original.id).filter(Boolean);
+    if (ids.length === 0) {
+      toast.warning("Selected rows have no ID.");
+      return;
+    }
+    const idsString = ids.join(",");
+
+    setIsDownloadingWithoutHeader(true);
+    try {
+      const res = await trigger({
+        url: SCHOOL_ALLOTMENT_MULTI_WITHOUT_HEADER,
+        method: "post",
+        data: { from_id: idsString },
+        responseType: "blob",
+      });
+
+      if (!res) {
+        toast.warning("No response from server.");
+        return;
+      }
+
+      const blob = new Blob([res], { type: "application/zip" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `receipts_${idsString}.zip`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => window.URL.revokeObjectURL(url), 100);
+
+      toast.success("Allotment downloaded successfully!");
+      setRowSelection({});
+    } catch (err) {
+      console.error("Error downloading receipt:", err);
+      toast.error(
+        err.message || "Something went wrong while downloading the receipt.",
+      );
+    } finally {
+      setIsDownloadingWithoutHeader(false);
+    }
+  };
+  const handleDownloadwithHeader = async () => {
     // const { from_id, to_id } = range;
 
     const selectedRows = table.getSelectedRowModel().rows;
@@ -267,56 +339,96 @@ const MultiDownloadAllotment = () => {
       setIsDownloadingWithHeader(false);
     }
   };
-
-  const handleDownloadWithoutHeader = async () => {
-    const selectedRows = table.getSelectedRowModel().rows;
-    if (selectedRows.length === 0) {
-      toast.warning("Please select at least one row to download.");
+  ///old
+  const handleoldDownload = async () => {
+    if (!fromId || !toId) {
+      toast.warning("Please enter both 'From ID' and 'To ID'.");
       return;
     }
-
-    const ids = selectedRows.map((row) => row.original.id).filter(Boolean);
-    if (ids.length === 0) {
-      toast.warning("Selected rows have no ID.");
-      return;
-    }
-    const idsString = ids.join(",");
-
-    setIsDownloadingWithoutHeader(true);
+    setIsDownloadingOldWithHeader(true);
     try {
       const res = await trigger({
-        url: SCHOOL_ALLOTMENT_MULTI_WITHOUT_HEADER,
+        url: SCHOOL_ALLOTMENT_OLD_MULTI_WITH_HEADER,
         method: "post",
-        data: { from_id: idsString },
+        data: { old_from_id: fromId, old_to_id: toId },
         responseType: "blob",
       });
 
       if (!res) {
         toast.warning("No response from server.");
+        setIsDownloadingOldWithHeader(false);
         return;
       }
-
       const blob = new Blob([res], { type: "application/zip" });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.setAttribute("download", `receipts_${idsString}.zip`);
+      link.setAttribute("download", `oldreceipts_${fromId}_${toId}.zip`);
       document.body.appendChild(link);
       link.click();
       link.remove();
-      setTimeout(() => window.URL.revokeObjectURL(url), 100);
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+      }, 100);
 
       toast.success("Allotment downloaded successfully!");
-      setRowSelection({});
+      // setRange({ from_id: "", to_id: "" });
+
+      setRowSelection({}); // clear selection
     } catch (err) {
       console.error("Error downloading receipt:", err);
       toast.error(
         err.message || "Something went wrong while downloading the receipt.",
       );
     } finally {
-      setIsDownloadingWithoutHeader(false);
+      setIsDownloadingOldWithHeader(false);
     }
   };
+  const handleoldDownloadWithHeader = async () => {
+    if (!fromId || !toId) {
+      toast.warning("Please enter both 'From ID' and 'To ID'.");
+      return;
+    }
+    setIsDownloadingOldWithoutHeader(true);
+
+    try {
+      const res = await trigger({
+        url: SCHOOL_ALLOTMENT_OLD_MULTI_WITHOUT_HEADER,
+        method: "post",
+        data: { old_from_id: fromId, old_to_id: toId },
+        responseType: "blob",
+      });
+      if (!res) {
+        toast.warning("No response from server.");
+        setIsDownloadingOldWithoutHeader(false);
+        return;
+      }
+      const blob = new Blob([res], { type: "application/zip" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `receipts_${fromId}_${toId}.zip`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+      }, 100);
+
+      toast.success("Allotment downloaded successfully!");
+      // setRange({ from_id: "", to_id: "" });
+
+      setRowSelection({}); // clear selection
+    } catch (err) {
+      console.error("Error downloading receipt:", err);
+      toast.error(
+        err.message || "Something went wrong while downloading the receipt.",
+      );
+    } finally {
+      setIsDownloadingOldWithoutHeader(false);
+    }
+  };
+
   // Shimmer component (adjusted to show 5 shimmer rows)
   const TableShimmer = () => {
     return Array.from({ length: 5 }).map((_, index) => (
@@ -364,7 +476,55 @@ const MultiDownloadAllotment = () => {
             className="pl-8 h-9 text-sm bg-gray-50 border-gray-200 focus:border-gray-300 focus:ring-gray-200"
           />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 -ml-10">
+          <Input
+            type="text"
+            className="w-24"
+            value={fromId}
+            onChange={(e) => setFromId(e.target.value)}
+            placeholder="From ID"
+          />
+          <Input
+            type="text"
+            className="w-24"
+            value={toId}
+            onChange={(e) => setToId(e.target.value)}
+            placeholder="To ID"
+          />
+        </div>
+        <div className="flex items-center gap-1 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-200">
+          <span className="text-xs text-indigo-600 font-medium">Count:</span>
+          <span className="text-sm font-bold text-indigo-800">{count}</span>
+        </div>
+        <div className="flex items-center gap-2 mr-2 ml-2">
+          <Button
+            variant="default"
+            size="sm"
+            disabled={isDownloadingOldWithHeader}
+            className="flex items-center gap-2"
+            onClick={handleoldDownload}
+          >
+            {isDownloadingOldWithHeader ? (
+              <Loader className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            {isDownloadingOldWithHeader ? "Downloading..." : "Old WH"}
+          </Button>
+          <Button
+            variant="default"
+            size="sm"
+            disabled={isDownloadingOldWithoutHeader}
+            className="flex items-center gap-2"
+            onClick={handleoldDownloadWithHeader}
+          >
+            {isDownloadingOldWithoutHeader ? (
+              <Loader className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            {isDownloadingOldWithoutHeader ? "Downloading..." : "Old WOH"}{" "}
+          </Button>
           <Button
             variant="default"
             size="sm"
@@ -373,7 +533,7 @@ const MultiDownloadAllotment = () => {
               !table.getSelectedRowModel().rows.length
             }
             className="flex items-center gap-2"
-            onClick={handleDownload}
+            onClick={handleDownloadwithHeader}
           >
             {isDownloadingWithHeader ? (
               <Loader className="h-4 w-4 animate-spin" />
@@ -399,6 +559,7 @@ const MultiDownloadAllotment = () => {
             )}
             {isDownloadingWithoutHeader ? "Downloading..." : "Download WOH"}
           </Button>
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" className="h-9">

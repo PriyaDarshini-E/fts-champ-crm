@@ -329,6 +329,9 @@ export const RECEIPT_SUPER_SUMBIT = `/api/receipt-zero`;
 // export const UPDATE_CHANGE_RECEPIT = `/api/update-change-receipts-donor`;
 export const RECEPIT_SUP_DOWNLOAD = `/api/receipt-view`;
 export const SCHOOL_ALLOTMENT_MULTI = `/api/download-school-alloted-multi`;
+export const SCHOOL_ALLOTMENT_OLD_MULTI_WITH_HEADER = `/api/old-download-school-alloted-multi`;
+export const SCHOOL_ALLOTMENT_OLD_MULTI_WITHOUT_HEADER = `/api/old-download-school-alloted-noheader-multi`;
+
 export const SCHOOL_ALLOTMENT_MULTI_WITHOUT_HEADER = `/api/download-school-alloted-noheader-multi`;
 
 export const WRONG_ALLOTMENT = `/api/wrong-alloted-list`;
