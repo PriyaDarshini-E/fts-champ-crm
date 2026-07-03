@@ -93,14 +93,13 @@ const Wrongallotment = () => {
       });
       toast.success(response?.message || "Emails sent successfully!");
     } catch (error) {
-      // Extract a readable error message
       const message =
         error?.response?.data?.message ||
         error?.message ||
         "Failed to send emails.";
       toast.error(message);
     } finally {
-      setDialogOpen(false); // Close dialog regardless of success/error
+      setDialogOpen(false); 
     }
   };
   const {
