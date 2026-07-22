@@ -104,6 +104,7 @@ const ReceiptOne = () => {
 
   const receipts = receiptData?.data || {};
 
+  console.log(receipts);
   const chapter = receiptData?.data?.chapter || {};
   const signature = `${receiptData?.image_url?.image_url}${receiptData?.auth_sign?.[0]?.indicomp_image_sign}`;
 
@@ -1090,29 +1091,46 @@ const ReceiptOne = () => {
                         Only via{" "}
                         {receipts.receipt_tran_pay_mode == "Cash" ? (
                           <>
-                            Cash for your contribution and adoption of{" "}
+                            Cash
+                            {receipts.receipt_csr === "Yes"
+                              ? " - This donation is under CSR obligation. being "
+                              : " "}
+                            for your contribution and adoption of{" "}
                             {receipts.receipt_no_of_ots} OTS.
                           </>
                         ) : (
                           <>
-                            {receipts.receipt_tran_pay_details} being for your
-                            contribution and adoption of{" "}
+                            {receipts.receipt_tran_pay_details}
+                            {receipts.receipt_csr === "Yes"
+                              ? " - This donation is under CSR obligation. "
+                              : " "}
+                            being for your contribution and adoption of{" "}
                             {receipts.receipt_no_of_ots} OTS.
                           </>
                         )}
                       </p>
                       <p className="font-serif text-sm leading-tight">
                         We convey our sincere thanks and gratitude for your kind
-                        support towards the need of our tribals...
+                        support towards the need of our tribals and also the
+                        efforts being made by our Society for achieving
+                        comprehensive development of our tribals brethren
+                        particularly the literacy of their children and health &
+                        economic welfare.
                       </p>
                       <p className="font-serif text-sm leading-tight">
                         We would like to state that our efforts are not only for
-                        mitigating the hardship...
+                        mitigating the hardship and problems of our tribals but
+                        we are also trying to inculcate national character among
+                        them.
                       </p>
                       <p className="font-serif text-sm leading-tight">
                         We are pleased to enclose herewith our money receipt no.{" "}
                         {receipts.receipt_ref_no} dated{" "}
-                        {moment(receipts.receipt_date).format("DD-MM-YYYY")}.
+                        {moment(receipts.receipt_date).format("DD-MM-YYYY")} for
+                        the said amount{" "}
+                        {receipts.receipt_exemption_type === "80G"
+                          ? " together with a certificate U/sec. 80(G) of the I.T.Act. 1961."
+                          : "."}
                       </p>
                     </div>
                   )}
@@ -1125,7 +1143,8 @@ const ReceiptOne = () => {
                         {receipts.receipt_total_amount}/- via your{" "}
                         {receipts.receipt_tran_pay_mode === "Cash"
                           ? "Cash"
-                          : receipts.receipt_tran_pay_details}{" "}
+                          : receipts.receipt_tran_pay_details}
+                        {receipts.receipt_csr === "Yes" ? " - This donation is under CSR obligation. " : " "}
                         being Donation for Education.
                       </p>
                       <p className="font-serif text-sm leading-tight">
@@ -1142,6 +1161,7 @@ const ReceiptOne = () => {
                       <p className="font-serif text-sm leading-tight">
                         We acknowledge with thanks receipt of your membership
                         subscription upto {receipts?.m_ship_vailidity}.
+                        {receipts.receipt_csr === "Yes" ? " This donation is under CSR obligation." : ""}
                       </p>
                     </div>
                   )}
@@ -1215,9 +1235,9 @@ const ReceiptOne = () => {
                               }, ${chapter?.chapter_state || ""} `}
                               <br />
                               {` ${chapter?.chapter_email ? `Email: ${chapter.chapter_email} |` : ""} 
-                  ${chapter?.chapter_website ? `${chapter.chapter_website} |` : ""} 
-                  ${chapter?.chapter_phone ? `Ph: ${chapter.chapter_phone} |` : ""} 
-                  ${chapter?.chapter_whatsapp ? `Mob: ${chapter.chapter_whatsapp}` : ""}`}
+                       ${chapter?.chapter_website ? `${chapter.chapter_website} |` : ""} 
+                       ${chapter?.chapter_phone ? `Ph: ${chapter.chapter_phone} |` : ""} 
+                       ${chapter?.chapter_whatsapp ? `Mob: ${chapter.chapter_whatsapp}` : ""}`}
                             </p>
                           </div>
                         </div>
@@ -1360,13 +1380,20 @@ const ReceiptOne = () => {
                         Only via{" "}
                         {receipts.receipt_tran_pay_mode == "Cash" ? (
                           <>
-                            Cash for your contribution and adoption of{" "}
+                            Cash
+                            {receipts.receipt_csr === "Yes"
+                              ? " - This donation is under CSR obligation. being "
+                              : " "}
+                            for your contribution and adoption of{" "}
                             {receipts.receipt_no_of_ots} OTS.
                           </>
                         ) : (
                           <>
-                            {receipts.receipt_tran_pay_details} being for your
-                            contribution and adoption of{" "}
+                            {receipts.receipt_tran_pay_details}
+                            {receipts.receipt_csr === "Yes"
+                              ? " - This donation is under CSR obligation. "
+                              : " "}
+                            being for your contribution and adoption of{" "}
                             {receipts.receipt_no_of_ots} OTS.
                           </>
                         )}
@@ -1386,12 +1413,14 @@ const ReceiptOne = () => {
                         we are also trying to inculcate national character among
                         them.
                       </p>
-                      <p className="my-4 font-serif text-[18px] text-justify leading-[1.2rem]">
+                      <p className="font-serif text-[18px] text-justify leading-[1.2rem]">
                         We are pleased to enclose herewith our money receipt no.{" "}
                         {receipts.receipt_ref_no} dated{" "}
                         {moment(receipts.receipt_date).format("DD-MM-YYYY")} for
-                        the said amount together with a certificate U/sec. 80(G)
-                        of the I.T.Act. 1961.
+                        the said amount
+                        {receipts.receipt_exemption_type === "80G"
+                          ? " together with a certificate U/sec. 80(G) of the I.T.Act. 1961."
+                          : "."}
                       </p>
                     </div>
                   )}
@@ -1403,7 +1432,8 @@ const ReceiptOne = () => {
                         {receipts.receipt_total_amount}/- via your{" "}
                         {receipts.receipt_tran_pay_mode === "Cash"
                           ? "Cash"
-                          : receipts.receipt_tran_pay_details}{" "}
+                          : receipts.receipt_tran_pay_details}
+                        {receipts.receipt_csr === "Yes" ? " - This donation is under CSR obligation. " : " "}
                         being Donation for Education.
                       </p>
 
@@ -1420,8 +1450,9 @@ const ReceiptOne = () => {
                     <div>
                       <p className="font-serif text-[18px] text-justify my-5 leading-[1.2rem]">
                         We acknowledge with thanks receipt of your membership
-                        subscription upto {receipts?.m_ship_vailidity}. Our
-                        receipt for the same is enclosed herewith.
+                        subscription upto {receipts?.m_ship_vailidity}.
+                        {receipts.receipt_csr === "Yes" ? " This donation is under CSR obligation. " : " "}
+                        Our receipt for the same is enclosed herewith.
                       </p>
                     </div>
                   )}
