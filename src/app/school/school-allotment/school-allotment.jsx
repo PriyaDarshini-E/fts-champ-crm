@@ -75,9 +75,20 @@ const SchoolToAllot = () => {
   };
 
   // Navigation handlers that store current page
-  const handleAllotment = (donorId, schoolAllotYear, receiptYear) => {
+  const handleAllotment = (donorId, schoolAllotYear, receiptYear, totalOTS) => {
     storeCurrentPage();
-    navigateToDonorDetailsView(navigate, donorId, schoolAllotYear, receiptYear);
+    navigateToDonorDetailsView(
+      navigate,
+      donorId,
+      schoolAllotYear,
+      receiptYear,
+      
+      {
+        state: {
+          totalOTS,
+        },
+      },
+    );
   };
 
   // Restore page from cookies when component mounts
@@ -283,6 +294,9 @@ const SchoolToAllot = () => {
 
               const status = company.indicomp_status;
               const donorId = company.id;
+              // const schollots = original.receipt_no_of_ots;
+              const totalOTS = item.receipt_no_of_ots;
+
               const schoolAllotYear = item.schoolalot_year;
               const receiptYear = item.receipt_financial_year;
               return (
@@ -294,13 +308,16 @@ const SchoolToAllot = () => {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() =>
+                            onClick={() => {
+                              console.log(item.receipt_no_of_ots);
+
                               handleAllotment(
                                 donorId,
                                 schoolAllotYear,
                                 receiptYear,
-                              )
-                            }
+                                totalOTS,
+                              );
+                            }}
                           >
                             <ClipboardList
                               className="h-5 w-5 text-blue-500"
