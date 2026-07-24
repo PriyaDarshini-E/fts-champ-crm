@@ -99,9 +99,11 @@ const SchoolAlloted = () => {
   };
 
   // Navigation handlers that store current page
-  const handleEditAllotment = (id, year) => {
+  const handleEditAllotment = (id, year, totalOTS) => {
     storeCurrentPage();
-    navigateToSchoolAllotEdit(navigate, id, year);
+    navigateToSchoolAllotEdit(navigate, id, year, {
+      state: { totalOTS },
+    });
   };
 
   const handleViewAllotment = (id) => {
@@ -319,7 +321,7 @@ const SchoolAlloted = () => {
                             <Button
                               variant="ghost"
                               size="icon"
-                              onClick={() => handleEditAllotment(id, year)}
+                              onClick={() => handleEditAllotment(id, year, row.original.receipt_no_of_ots)}
                             >
                               <Edit className="h-5 w-5 " />
                             </Button>
@@ -371,7 +373,7 @@ const SchoolAlloted = () => {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => handleEditAllotment(id, year)}
+                          onClick={() => handleEditAllotment(id, year, row.original.receipt_no_of_ots)}
                         >
                           <Edit className="h-5 w-5 " />
                         </Button>

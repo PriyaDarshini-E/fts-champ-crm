@@ -39,6 +39,8 @@ import {
   SCHOOL_LIST,
   SCHOOL_TO_ALOT_LIST,
 } from "../../../api";
+import { useLocation } from "react-router-dom";
+
 import { TableShimmer } from "../loadingtable/TableShimmer";
 import PaginationShimmer from "@/components/common/pagination-schimmer";
 const DonorDetails = () => {
@@ -59,7 +61,8 @@ const DonorDetails = () => {
   const [debouncedPage, setDebouncedPage] = useState("");
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 });
   const [pageInput, setPageInput] = useState("");
-
+  const location = useLocation();
+  const totalOTS = location.state?.totalOTS ?? 0;
   const { trigger: submitDetails, loading: submitloading } = useApiMutation();
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearchTerm(searchTerm), 500);
@@ -68,7 +71,7 @@ const DonorDetails = () => {
 
   const { data: schoolUserData, refetch: refetchchooluser } = useGetMutation(
     "schooluserdata",
-    `${SCHOOL_DATA_BY_ID}/${donorId}`
+    `${SCHOOL_DATA_BY_ID}/${donorId}`,
   );
 
   const {
@@ -77,7 +80,7 @@ const DonorDetails = () => {
     isError,
   } = useGetMutation(
     "schoolallotyear",
-    `${SCHOOL_ALLOT_YEAR_BY_YEAR}/${donorYear}`
+    `${SCHOOL_ALLOT_YEAR_BY_YEAR}/${donorYear}`,
   );
 
   const userdata = schoolUserData?.data || [];
@@ -92,7 +95,7 @@ const DonorDetails = () => {
     {
       page: pagination.pageIndex + 1,
       ...(debouncedSearchTerm ? { search: debouncedSearchTerm } : {}),
-    }
+    },
   );
   useEffect(() => {
     refetchchooluser();
@@ -121,13 +124,13 @@ const DonorDetails = () => {
       header: () => {
         const nonAllottedSchools =
           schoolData?.data?.school?.data?.filter(
-            (s) => s.status_label !== "Allotted"
+            (s) => s.status_label !== "Allotted",
           ) || [];
 
         const allSelected =
           nonAllottedSchools.length > 0 &&
           nonAllottedSchools.every((s) =>
-            selectedSchoolIds.includes(s.school_code)
+            selectedSchoolIds.includes(s.school_code),
           );
 
         return (
@@ -136,11 +139,17 @@ const DonorDetails = () => {
               checked={allSelected}
               onCheckedChange={(checked) => {
                 if (checked) {
-                  setSelectedSchoolIds(
-                    nonAllottedSchools.map((s) => s.school_code)
-                  );
+                  setSelectedSchoolIds((prev) => {
+                    const newIds = nonAllottedSchools.map((s) => s.school_code);
+                    return Array.from(new Set([...prev, ...newIds]));
+                  });
                 } else {
-                  setSelectedSchoolIds([]);
+                  setSelectedSchoolIds((prev) => {
+                    const idsToRemove = new Set(
+                      nonAllottedSchools.map((s) => s.school_code),
+                    );
+                    return prev.filter((id) => !idsToRemove.has(id));
+                  });
                 }
               }}
               className="bg-white data-[state=checked]:bg-white data-[state=checked]:text-primary border border-gray-300 rounded"
@@ -157,7 +166,7 @@ const DonorDetails = () => {
             disabled={row.original.status_label === "Allotted"}
             onCheckedChange={(checked) => {
               setSelectedSchoolIds((prev) =>
-                checked ? [...prev, id] : prev.filter((s) => s !== id)
+                checked ? [...prev, id] : prev.filter((s) => s !== id),
               );
             }}
             aria-label={`Select school ${id}`}
@@ -341,14 +350,14 @@ const DonorDetails = () => {
         className="h-8 w-8 p-0 text-xs"
       >
         1
-      </Button>
+      </Button>,
     );
 
     if (currentPage > 3) {
       buttons.push(
         <span key="ellipsis1" className="px-2">
           ...
-        </span>
+        </span>,
       );
     }
 
@@ -367,7 +376,7 @@ const DonorDetails = () => {
             className="h-8 w-8 p-0 text-xs"
           >
             {i}
-          </Button>
+          </Button>,
         );
       }
     }
@@ -376,7 +385,7 @@ const DonorDetails = () => {
       buttons.push(
         <span key="ellipsis2" className="px-2">
           ...
-        </span>
+        </span>,
       );
     }
 
@@ -390,7 +399,7 @@ const DonorDetails = () => {
           className="h-8 w-8 p-0 text-xs"
         >
           {totalPages}
-        </Button>
+        </Button>,
       );
     }
 
@@ -441,20 +450,40 @@ const DonorDetails = () => {
       </div>
 
       {/* Search */}
-      <div className="flex items-center justify-between py-1">
-        <div className="relative w-64">
-          <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
-          <Input
-            placeholder="Search school allotment..."
-            value={searchTerm ?? ""}
-            onChange={(event) => setSearchTerm(event.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") {
-                setSearchTerm("");
-              }
-            }}
-            className="pl-8 h-9 text-sm bg-gray-50 border-gray-200 focus:border-gray-300 focus:ring-gray-200"
-          />
+      <div className="flex  items-center justify-between py-1 gap-1">
+        <div className="flex items-center gap-2">
+          <div className="relative w-64">
+            <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
+            <Input
+              placeholder="Search school allotment..."
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  setSearchTerm("");
+                }
+              }}
+              className="pl-8 h-9 text-sm bg-gray-50 border-gray-200"
+            />
+          </div>
+
+          <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-1">
+            <span className="text-sm font-medium text-gray-700">School to Allot</span>
+
+            <span className="px-3 py-1 rounded-full bg-green-600 text-white font-bold">
+              {totalOTS}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1">
+            <span className="text-sm font-medium text-gray-700">
+              Selected Schools
+            </span>
+
+            <span className="px-3 py-1 rounded-full bg-blue-600 text-white font-bold">
+              {selectedSchoolIds.length}
+            </span>
+          </div>
         </div>
         <div className="flex justify-end space-x-2">
           <DropdownMenu>
@@ -502,7 +531,7 @@ const DonorDetails = () => {
                       ? null
                       : flexRender(
                           header.column.columnDef.header,
-                          header.getContext()
+                          header.getContext(),
                         )}
                   </TableHead>
                 ))}
@@ -519,7 +548,7 @@ const DonorDetails = () => {
                     <TableCell key={cell.id} className="px-3 py-1">
                       {flexRender(
                         cell.column.columnDef.cell,
-                        cell.getContext()
+                        cell.getContext(),
                       )}
                     </TableCell>
                   ))}

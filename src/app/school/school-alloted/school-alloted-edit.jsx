@@ -31,7 +31,7 @@ import {
 } from "@tanstack/react-table";
 import { ChevronDown, ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import {
   FETCH_SCHOOL_ALLOT_LIST,
@@ -44,9 +44,20 @@ import PaginationShimmer from "@/components/common/pagination-schimmer";
 const SchoolAllotEdit = () => {
   const navigate = useNavigate();
   const { id, year } = useParams();
-  const queryClient = useQueryClient();
+  const location = useLocation();
   const donorId = decryptId(id);
   const donorYear = decryptId(year);
+  const {
+    data: schoolalot,
+    refetch: refetchSchoolAllot,
+    isLoading: loadingSchoolAllot,
+  } = useGetMutation(
+    `schooluserdata${donorId}`,
+    `${FETCH_SCHOOL_ALLOT_LIST}/${donorId}`,
+  );
+  const totalOTS = location.state?.totalOTS ?? schoolalot?.data?.receipt_no_of_ots ?? 0;
+  console.log("totalOTS from location state:", location.state);
+  const queryClient = useQueryClient();
   const keyDown = useNumericInput();
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
@@ -66,14 +77,6 @@ const SchoolAllotEdit = () => {
     const timer = setTimeout(() => setDebouncedSearchTerm(searchTerm), 500);
     return () => clearTimeout(timer);
   }, [searchTerm]);
-  const {
-    data: schoolalot,
-    refetch: refetchSchoolAllot,
-    isLoading: loadingSchoolAllot,
-  } = useGetMutation(
-    `schooluserdata${donorId}`,
-    `${FETCH_SCHOOL_ALLOT_LIST}/${donorId}`
-  );
 
   const {
     data: schoolListRes,
@@ -87,25 +90,22 @@ const SchoolAllotEdit = () => {
     {
       page: pagination.pageIndex + 1,
       ...(debouncedSearchTerm ? { search: debouncedSearchTerm } : {}),
-    }
+    },
   );
+
   const schoolData = schoolListRes?.data || [];
+  console.log(schoolData);
   useEffect(() => {
     if (!donorId || !donorYear) return;
 
-    if (schoolalot?.data && schoolListRes?.data) {
+    if (schoolalot?.data) {
       const savedIds = (schoolalot?.data?.schoolalot_school_id || "")
         .split(",")
-        .map((id) => id.trim());
-
-      const school = schoolListRes?.data?.data || [];
-
-      const defaultSelectedIds = school
-        .filter((s) => savedIds.includes(s.school_code.trim()))
-        .map((s) => s.school_code.trim());
-      setSelectedSchoolIds(defaultSelectedIds);
+        .map((id) => id.trim())
+        .filter(Boolean);
+      setSelectedSchoolIds(savedIds);
     }
-  }, [schoolalot, schoolListRes]);
+  }, [donorId, donorYear, schoolalot]);
 
   useEffect(() => {
     if (donorId && donorYear) {
@@ -172,19 +172,27 @@ const SchoolAllotEdit = () => {
           schoolData?.data?.filter((s) => s.status_label !== "Allotted") || [];
 
         const allSelected =
-          selectedSchoolIds.length > 0 &&
-          selectedSchoolIds.length === selectableSchools.length;
+          selectableSchools.length > 0 &&
+          selectableSchools.every((s) =>
+            selectedSchoolIds.includes(s.school_code),
+          );
 
         return (
           <Checkbox
             checked={allSelected}
             onCheckedChange={(checked) => {
+              const pageSchoolCodes = selectableSchools.map(
+                (s) => s.school_code,
+              );
+
               if (checked) {
-                setSelectedSchoolIds(
-                  selectableSchools.map((s) => s.school_code)
-                );
+                setSelectedSchoolIds((prev) => [
+                  ...new Set([...prev, ...pageSchoolCodes]),
+                ]);
               } else {
-                setSelectedSchoolIds([]);
+                setSelectedSchoolIds((prev) =>
+                  prev.filter((id) => !pageSchoolCodes.includes(id)),
+                );
               }
             }}
             className="bg-white data-[state=checked]:bg-white data-[state=checked]:text-primary border border-gray-300 rounded"
@@ -202,7 +210,7 @@ const SchoolAllotEdit = () => {
             disabled={disabled}
             onCheckedChange={(checked) => {
               setSelectedSchoolIds((prev) =>
-                checked ? [...prev, code] : prev.filter((id) => id !== code)
+                checked ? [...prev, code] : prev.filter((id) => id !== code),
               );
             }}
             aria-label={`Select school ${code}`}
@@ -301,14 +309,14 @@ const SchoolAllotEdit = () => {
         className="h-8 w-8 p-0 text-xs"
       >
         1
-      </Button>
+      </Button>,
     );
 
     if (currentPage > 3) {
       buttons.push(
         <span key="ellipsis1" className="px-2">
           ...
-        </span>
+        </span>,
       );
     }
 
@@ -327,7 +335,7 @@ const SchoolAllotEdit = () => {
             className="h-8 w-8 p-0 text-xs"
           >
             {i}
-          </Button>
+          </Button>,
         );
       }
     }
@@ -336,7 +344,7 @@ const SchoolAllotEdit = () => {
       buttons.push(
         <span key="ellipsis2" className="px-2">
           ...
-        </span>
+        </span>,
       );
     }
 
@@ -350,7 +358,7 @@ const SchoolAllotEdit = () => {
           className="h-8 w-8 p-0 text-xs"
         >
           {totalPages}
-        </Button>
+        </Button>,
       );
     }
 
@@ -385,22 +393,38 @@ const SchoolAllotEdit = () => {
         </div>
       </div>
 
-      {/* Table */}
-      <div className="flex items-center justify-between py-1">
-        <div className="relative w-64">
-          <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
-          <Input
-            placeholder="Search allotment..."
-            value={searchTerm}
-            onChange={(event) => setSearchTerm(event.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") {
-                setSearchTerm("");
-              }
-            }}
-            className="pl-8 h-9 text-sm bg-gray-50 border-gray-200 focus:border-gray-300 focus:ring-gray-200"
-          />
+      <div className="flex items-center justify-between py-1 flex-wrap gap-2">
+        {/* Left Side */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative w-64">
+            <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
+            <Input
+              placeholder="Search allotment..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-8 h-9"
+            />
+          </div>
+
+          <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-1">
+            <span className="text-sm font-medium text-gray-700">School to Allot</span>
+
+            <span className="px-3 py-1 rounded-full bg-green-600 text-white font-bold">
+              {totalOTS}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1">
+            <span className="text-sm font-medium text-gray-700">
+              Selected Schools
+            </span>
+
+            <span className="px-3 py-1 rounded-full bg-blue-600 text-white font-bold">
+              {selectedSchoolIds.length}
+            </span>
+          </div>
         </div>
+
         <div className="flex justify-end space-x-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -445,7 +469,7 @@ const SchoolAllotEdit = () => {
                       ? null
                       : flexRender(
                           header.column.columnDef.header,
-                          header.getContext()
+                          header.getContext(),
                         )}
                   </TableHead>
                 ))}
@@ -462,7 +486,7 @@ const SchoolAllotEdit = () => {
                     <TableCell key={cell.id} className="px-3 py-1">
                       {flexRender(
                         cell.column.columnDef.cell,
-                        cell.getContext()
+                        cell.getContext(),
                       )}
                     </TableCell>
                   ))}
