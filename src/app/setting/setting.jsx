@@ -165,7 +165,7 @@ const Settings = () => {
         </TabsList>
 
         <TabsContent value="profile" className="space-y-2">
-        <ProfileSetting
+      <ProfileSetting
     user={user}
     editProfile={editProfile}
     setEditProfile={setEditProfile}

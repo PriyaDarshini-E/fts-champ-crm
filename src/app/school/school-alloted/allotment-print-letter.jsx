@@ -4,6 +4,19 @@ import Logo1 from "../../../assets/receipt/fts.png";
 import Logo2 from "../../../assets/receipt/top.png";
 import moment from "moment";
 
+// ----- Salutation helper (matches PHP logic) -----
+const getSalutation = (donor) => {
+  if (!donor) return "Respected Sir,";
+  const isIndividual = donor.indicomp_type === "Individual";
+  if (isIndividual) {
+    const title = donor.title || "";
+    if (title === "Shri") return "Respected Sir,";
+    if (title === "Smt.") return "Respected Madam,";
+    return "Respected Sir,"; // fallback for other titles
+  }
+  return "Respected Sir/Madam,";
+};
+
 const TABLE_HEADERS = [
   "STATE",
   "ANCHAL CLUSTER",
@@ -106,8 +119,7 @@ const AllotmentPrintLetter = ({
 }) => {
   const today = moment().format("DD/MM/YYYY");
   const schools = Array.isArray(SchoolAlotView) ? SchoolAlotView : [];
-  console.log("OTSReceipts", OTSReceipts);
-  console.log("SchoolAlotView", SchoolAlotView);
+
   const chunkArray = (array, size) => {
     const chunks = [];
     for (let i = 0; i < array.length; i += size) {
@@ -116,7 +128,6 @@ const AllotmentPrintLetter = ({
     return chunks;
   };
 
-  // Use sum of receipt_no_of_ots from OTSReceipts as the total school count
   const totalOTSCount = Array.isArray(OTSReceipts)
     ? OTSReceipts.reduce(
         (sum, r) => sum + (parseInt(r.receipt_no_of_ots, 10) || 0),
@@ -124,9 +135,8 @@ const AllotmentPrintLetter = ({
       )
     : 0;
 
-  // If totalOTSCount < 5: show all on Page 1 before footer (with donor header)
-  // If totalOTSCount >= 5: Page 1 = letter only; Page 2+ = donor header + table chunks of 15
-  const showOnPage1 = totalOTSCount < 5;
+  // Show table on page 1 only if schools <= 2
+  const showOnPage1 = totalOTSCount <= 2;
   const schoolsForPage1 = showOnPage1 ? schools : [];
   const remainingSchools = showOnPage1 ? [] : schools;
   const schoolChunks =
@@ -136,7 +146,6 @@ const AllotmentPrintLetter = ({
     ? chapters?.[0]?.auth_sign
     : chapters?.auth_sign;
 
-  // Tighten margins on Page 1 when table is also shown
   const marginClass = showOnPage1 ? "my-2" : "my-4";
   const mbClass = showOnPage1 ? "mb-2" : "mb-5";
 
@@ -204,6 +213,7 @@ const AllotmentPrintLetter = ({
                 ) : (
                   <p>{`M/s ${SchoolAlotReceipt?.donor?.indicomp_full_name}`}</p>
                 )}
+                {/* Office address if present */}
                 {SchoolAlotReceipt?.donor?.indicomp_off_branch_address && (
                   <div className="text-base">
                     <p>
@@ -220,6 +230,7 @@ const AllotmentPrintLetter = ({
                     </p>
                   </div>
                 )}
+                {/* Registered address if present */}
                 {SchoolAlotReceipt?.donor?.indicomp_res_reg_address && (
                   <div className="text-base">
                     <p>{SchoolAlotReceipt?.donor?.indicomp_res_reg_address}</p>
@@ -235,47 +246,51 @@ const AllotmentPrintLetter = ({
               </div>
             )}
 
+            {/* --- SALUTATION (same as preview) --- */}
             <label className={`flex ${marginClass} text-base`}>
-              {SchoolAlotReceipt?.donor?.indicomp_gender === "Female" && (
-                <>Respected Madam,</>
-              )}
-              {SchoolAlotReceipt?.donor?.indicomp_gender === "Male" && (
-                <>Respected Sir,</>
-              )}
-              {SchoolAlotReceipt?.donor?.indicomp_gender == null && (
-                <>Respected Sir,</>
-              )}
+              {getSalutation(SchoolAlotReceipt?.donor)}
             </label>
 
             <div className="text-base">
               <div className={`${mbClass} text-justify`}>
                 <label>
-                  <b>
-                    "Giving is not just about making donation, it's about making
-                    a difference"
-                  </b>
-                  <span>
-                    {" "}
-                    , we are able to bring about this difference only because of
-                    the support of our kind donors. Your support to FTS gives
-                    wings to the dreams of the little children studying in Ekal
-                    Vidyalaya. We express our sincere thanks and gratitude to
-                    you for adopting <b>" One Teacher School " (OTS)</b> and
-                    thus helping us in providing light of education to the
-                    weaker sections of the society.
+                  <span className="font-bold">
+                    Giving is not just about making donation, it's about making
+                    a difference
                   </span>
+                  , we are able to bring about this difference only because of
+                  the support of our kind donors. Your support to FTS gives
+                  wings to the dreams of the little children studying in Ekal
+                  Vidyalaya. We express our sincere thanks and gratitude to you
+                  for adopting{" "}
+                  <span className="font-bold">"One Teacher School" (OTS)</span>{" "}
+                  and thus helping us in providing light of education to the
+                  weaker sections of the society.
                 </label>
               </div>
               <div className={`${marginClass} text-justify`}>
                 <label>
                   Please find enclosed herewith details of the Ekal Vidyalaya
                   running with your assistance. You may also view the details
-                  through our website: www.ftsindia.com/donor-login. Please
-                  click on <b>INSIGHTS</b> and enter your Donor ID{" "}
-                  {SchoolAlotReceipt?.donor?.indicomp_fts_id || ""} and Password{" "}
-                  {SchoolAlotReceipt?.donor?.cpassword || ""}
+                  through below links. <br />
+                  website:{" "}
+                  <span className="font-bold">
+                    www.ftsindia.com/donor-login.
+                  </span>
+                  <br />
+                  Please enter your{" "}
+                  <span className="font-bold">
+                    DONOR ID : {SchoolAlotReceipt?.donor?.indicomp_fts_id || ""}
+                  </span>{" "}
+                  <span className="font-bold">
+                    and Password {SchoolAlotReceipt?.donor?.cpassword || ""}
+                  </span>
                 </label>
               </div>
+              <label className="flex mt-2">
+                Please find enclosed herewith the list of your adopted schools,
+                provided below
+              </label>
               <label className={`flex ${marginClass}`}>
                 We hope to get your continued patronage for serving the society.
               </label>
@@ -303,7 +318,7 @@ const AllotmentPrintLetter = ({
               </div>
             </div>
 
-            {/* Table on Page 1 — only when schools <= 5 */}
+            {/* Table on Page 1 — only when schools <= 2 */}
             {showOnPage1 && schoolsForPage1.length > 0 && (
               <div className="-mt-8">
                 <DonorHeader
@@ -350,13 +365,12 @@ const AllotmentPrintLetter = ({
           )}
         </div>
 
-        {/* PAGES 2+: School list pages (only when schools > 5) */}
+        {/* PAGES 2+: School list pages (only when schools > 2) */}
         {schoolChunks.map((chunk, chunkIndex) => (
           <div
             key={chunkIndex}
             className="pdf-page bg-white shadow-lg mb-8 page-break"
           >
-            {/* No logo/footer on these pages — only donor header + table */}
             <div className="flex-grow">
               <DonorHeader
                 SchoolAlotReceipt={SchoolAlotReceipt}

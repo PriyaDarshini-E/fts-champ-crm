@@ -130,13 +130,36 @@ const SchoolAllotLetter = () => {
         pdf.addImage(imgData, "PNG", 0, 0, 210, 297, "", "FAST");
       }
 
-      pdf.save("Allotment-letter.pdf");
+      const title = SchoolAlotReceipt?.donor?.title || "";
+      const fullName = SchoolAlotReceipt?.donor?.indicomp_full_name || "";
+      // Combine title and name, remove extra spaces, replace spaces with underscores
+      const namePart = [title, fullName]
+        .filter(Boolean)
+        .join(" ")
+        .replace(/\s+/g, "_");
+      const fileName = namePart ? `${namePart}.pdf` : "Allotment_Letter.pdf";
+      pdf.save(fileName);
     } catch (error) {
       console.error("Error generating PDF:", error);
       toast.error("Failed to generate PDF");
     } finally {
       setIsProcessingPdf(false);
     }
+  };
+
+  // ----- SALUTATION HELPER (matches PHP logic) -----
+  const getSalutation = (donor) => {
+    if (!donor) return "Respected Sir,";
+    const isIndividual = donor.indicomp_type === "Individual";
+    if (isIndividual) {
+      const title = donor.title || "";
+      if (title === "Shri") return "Respected Sir,";
+      if (title === "Smt.") return "Respected Madam,";
+      // fallback for other titles (e.g., Dr., Mr., etc.)
+      return "Respected Sir,";
+    }
+    // Corporate or other types
+    return "Respected Sir/Madam,";
   };
 
   if (isLoading) {
@@ -162,12 +185,14 @@ const SchoolAllotLetter = () => {
       </div>
     );
   }
+
   const signBaseUrl = schoolLetter?.data?.image_url?.image_url;
   const signFile = schoolLetter?.data?.auth_sign?.indicomp_image_sign;
   const SchoolAlotReceipt = schoolLetter?.data?.individualCompany || {};
   const SchoolAlotView = schoolLetter?.data?.SchoolAlotView || [];
   const OTSReceipts = schoolLetter?.data?.OTSReceipts || [];
   const chapters = schoolLetter?.data?.chapter || [];
+
   const handleClickOpen = (id) => {
     setSelectedId(id);
     setOpen(true);
@@ -178,6 +203,7 @@ const SchoolAllotLetter = () => {
     setDonorEmail("");
     setSelectedId(null);
   };
+
   const onSubmitMail = async (e) => {
     e.preventDefault();
     if (!selectedId)
@@ -202,6 +228,7 @@ const SchoolAllotLetter = () => {
       toast.error(err.message || "Failed to update");
     }
   };
+
   const onSubmit = async ({ id }) => {
     if (!id) return toast.error("Id is Missing, Please try again later");
 
@@ -221,8 +248,10 @@ const SchoolAllotLetter = () => {
       toast.error(err.message || "Failed to update");
     }
   };
+
   return (
     <div className="invoice-wrapper overflow-x-auto grid md:grid-cols-1 1fr">
+      {/* Floating action bar */}
       <div className="fixed bottom-10 left-1/2 transform -translate-x-1/2 z-50">
         <Card className="p-3 shadow-2xl border border-white/30 backdrop-blur-lg bg-white/80 rounded-2xl hover:bg-white/90 transition-all duration-300">
           <div className="flex items-center gap-2">
@@ -246,6 +275,7 @@ const SchoolAllotLetter = () => {
                 <TooltipContent>Print Receipt</TooltipContent>
               </Tooltip>
             </TooltipProvider>
+
             {SchoolAlotReceipt?.donor?.indicomp_email ? (
               <TooltipProvider>
                 <Tooltip>
@@ -254,7 +284,7 @@ const SchoolAllotLetter = () => {
                       variant="ghost"
                       size="icon"
                       type="button"
-                      className="h-11 w-11 relative rounded-md transition-all duration-300 hover:scale-110 border  border-[var(--color-border)] hover:shadow-md"
+                      className="h-11 w-11 relative rounded-md transition-all duration-300 hover:scale-110 border border-[var(--color-border)] hover:shadow-md"
                       onClick={() => onSubmit({ id: donorId })}
                     >
                       {SchoolAlotReceipt && (
@@ -285,7 +315,7 @@ const SchoolAllotLetter = () => {
                     onClick={() =>
                       handleClickOpen(SchoolAlotReceipt?.donor?.indicomp_fts_id)
                     }
-                    className=" rounded-md transition-all duration-300 hover:scale-110 border border-[var(--color-border)]  hover:shadow-md"
+                    className="rounded-md transition-all duration-300 hover:scale-110 border border-[var(--color-border)] hover:shadow-md"
                   >
                     <MailPlus className="h-5 w-5 text-red-500" />
                   </Button>
@@ -307,7 +337,6 @@ const SchoolAllotLetter = () => {
                     }
                   >
                     <PenTool className="h-5 w-5" />
-
                     <span
                       className={`absolute -top-2 -right-2 min-w-[20px] h-5 px-1 rounded-full text-[10px] font-semibold flex items-center justify-center border-2 border-white ${
                         showSignature === "Yes"
@@ -319,10 +348,7 @@ const SchoolAllotLetter = () => {
                     </span>
                   </button>
                 </TooltipTrigger>
-
-                <TooltipContent>
-                  <p>Signature</p>
-                </TooltipContent>
+                <TooltipContent>Signature</TooltipContent>
               </Tooltip>
             </TooltipProvider>
 
@@ -349,9 +375,11 @@ const SchoolAllotLetter = () => {
           </div>
         </Card>
       </div>
-      <div className="flex flex-col items-center ">
+
+      <div className="flex flex-col items-center">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 w-full">
-          <div className="bg-white text-[12px] lg:col-span-3 shadow-md rounded-md p-6 border  transition-all hover:shadow-lg leading-relaxed">
+          {/* Left panel – table */}
+          <div className="bg-white text-[12px] lg:col-span-3 shadow-md rounded-md p-6 border transition-all hover:shadow-lg leading-relaxed">
             <div className="border-b flex justify-between pb-2 mb-3">
               <p className="font-medium">
                 Donor ID: <span>{SchoolAlotReceipt?.indicomp_fts_id}</span>
@@ -375,16 +403,16 @@ const SchoolAllotLetter = () => {
             <div className="my-5 overflow-x-auto mb-14">
               <table className="min-w-full border-collapse border border-gray-500">
                 <thead>
-                  <tr className="bg-gray-200 ">
+                  <tr className="bg-gray-200">
                     {[
                       "STATE",
-                      "ANCHAL  CLUSTER",
+                      "ANCHAL CLUSTER",
                       "CLUSTER",
                       "SUB CLUSTER",
                       "VILLAGE",
                       "TEACHER",
                       "BOYS",
-                      "GIRLS  ",
+                      "GIRLS",
                       "TOTAL",
                     ].map((header, index) => (
                       <th
@@ -400,31 +428,31 @@ const SchoolAllotLetter = () => {
                   {Array.isArray(SchoolAlotView) &&
                     SchoolAlotView.map((dataSumm) => (
                       <tr key={dataSumm.id}>
-                        <td className="border border-gray-500  px-2 py-2 text-xs">
+                        <td className="border border-gray-500 px-2 py-2 text-xs">
                           {dataSumm.school_state}
                         </td>
-                        <td className="border border-gray-500  px-2 py-2 text-xs">
+                        <td className="border border-gray-500 px-2 py-2 text-xs">
                           {dataSumm.achal}
                         </td>
-                        <td className="border border-gray-500  px-2 py-2 text-xs">
+                        <td className="border border-gray-500 px-2 py-2 text-xs">
                           {dataSumm.cluster}
                         </td>
-                        <td className="border border-gray-500  px-2 py-2 text-xs">
+                        <td className="border border-gray-500 px-2 py-2 text-xs">
                           {dataSumm.sub_cluster}
                         </td>
-                        <td className="border border-gray-500  px-2 py-2 text-xs">
+                        <td className="border border-gray-500 px-2 py-2 text-xs">
                           {dataSumm.village}
                         </td>
-                        <td className="border border-gray-500  px-2 py-2 text-xs">
+                        <td className="border border-gray-500 px-2 py-2 text-xs">
                           {dataSumm.teacher}
                         </td>
-                        <td className="border border-gray-500  px-2 py-2 text-xs">
+                        <td className="border border-gray-500 px-2 py-2 text-xs">
                           {dataSumm.boys}
                         </td>
-                        <td className="border border-gray-500  px-2 py-2 text-xs">
+                        <td className="border border-gray-500 px-2 py-2 text-xs">
                           {dataSumm.girls}
                         </td>
-                        <td className="border border-gray-500  px-2 py-2 text-xs">
+                        <td className="border border-gray-500 px-2 py-2 text-xs">
                           {dataSumm.total}
                         </td>
                       </tr>
@@ -433,14 +461,15 @@ const SchoolAllotLetter = () => {
               </table>
             </div>
           </div>
-          <div className="bg-white text-sm lg:col-span-2  text-[#464D69] font-serif  shadow-md rounded-md p-6 border  transition-all hover:shadow-lg leading-relaxed">
+
+          {/* Right panel – letter preview */}
+          <div className="bg-white text-sm lg:col-span-2 text-[#464D69] font-serif shadow-md rounded-md p-6 border transition-all hover:shadow-lg leading-relaxed">
             <div className="flex justify-between items-center mb-4">
               {showSignature === "Yes" ? (
                 <>
                   <div className="invoice-logo">
                     <img src={Logo1} alt="session-logo" className="w-40" />
                   </div>
-
                   <div className="invoice-logo text-right">
                     <img src={Logo3} alt="session-logo" width="80" />
                   </div>
@@ -449,10 +478,8 @@ const SchoolAllotLetter = () => {
                 <div className="h-20"></div>
               )}
             </div>
-
             <p className="font-medium">Date: {today}</p>
             <p>To,</p>
-
             {Object.keys(SchoolAlotReceipt).length !== 0 && (
               <div className="mt-1">
                 <p>
@@ -468,60 +495,54 @@ const SchoolAllotLetter = () => {
                 </p>
               </div>
             )}
-
-            <p className="mt-1">
-              {SchoolAlotReceipt?.donor?.indicomp_gender === "Female"
-                ? "Respected Madam,"
-                : "Respected Sir,"}
-            </p>
-
+            {/* --- SALUTATION (UPDATED) --- */}
+            <p className="mt-1">{getSalutation(SchoolAlotReceipt?.donor)}</p>
             <p className="mt-2 text-justify">
-              <p>
-                “Giving is not just about making donation, it’s about making a
-                difference.”
-              </p>{" "}
-              We are able to bring about this difference only because of the
+              <span className="font-bold">
+                Giving is not just about making donation, it’s about making a
+                difference,
+              </span>
+              we are able to bring about this difference only because of the
               support of our kind donors. Your support to FTS gives wings to the
               dreams of the little children studying in Ekal Vidyalaya. We
-              express our sincere thanks and gratitude to you for adopting One
-              Teacher School (OTS) and helping us in providing light of
-              education to the weaker sections of society.
+              express our sincere thanks and gratitude to you for adopting{" "}
+              <span className="font-bold">One Teacher School</span> (OTS) and
+              thus helping us in providing light of education to the weaker
+              sections of the society.
             </p>
-
             <p className="mt-1 text-justify">
-              Please find enclosed the details of the Ekal Vidyalaya running
-              with your assistance. You may also view the details through our
-              website www.ftsindia.com/donor-login. Click on INSIGHTS and enter
-              your Donor ID {}
-              {SchoolAlotReceipt?.donor?.indicomp_fts_id || ""} and Password{" "}
-              {SchoolAlotReceipt?.donor?.cpassword || ""}
+              Please find enclosed herewith details of the Ekal Vidyalaya
+              running with your assistance. You may also view the details
+              through below links. <br />
+              website:
+              <span className="font-bold">www.ftsindia.com/donor-login.</span>
+              <br />
+              Please enter your
+              <span className="font-bold">
+                {" "}
+                DONOR ID :{SchoolAlotReceipt?.donor?.indicomp_fts_id || ""}
+              </span>{" "}
+              <span className="font-bold">
+                and Password {SchoolAlotReceipt?.donor?.cpassword || ""}
+              </span>
             </p>
-
+            <br />{" "}
+            <p>
+              Please find enclosed herewith the list of your adopted schools,
+              provided below
+            </p>
             <p className="mt-2">
               We hope to get your continued patronage for serving the society.
             </p>
             <div className="">
               <p className="flex my-4">Thanking you once again!!</p>
               <div className="relative w-fit h-28">
-                {/* TOP TEXT */}
                 <p className="flex my-4">With Regards,</p>
-
-                {/* NAME + DESIGNATION (BOTTOM LAYER) */}
                 <div className="absolute bottom-0 left-0 z-10 leading-tight font-serif text-sm">
                   {schoolLetter?.data?.auth_sign?.indicomp_full_name}
                   <br />
                   {schoolLetter?.data?.chapter?.[0]?.auth_sign}
                 </div>
-
-                {/* SIGNATURE (MIDDLE OVERLAP LAYER) */}
-                {/* {showSignature === "Yes" ? (
-                  <img
-                    src={`${signBaseUrl}${signFile}`}
-                    alt="Authorized Signature"
-                    className="absolute top-2 left-0 h-20 z-20  px-1"
-                  />
-                ) : (
-                )} */}
 
                 {showSignature === "Yes" ? (
                   <>
@@ -539,25 +560,23 @@ const SchoolAllotLetter = () => {
                 )}
               </div>
             </div>
-            {showSignature == "Yes" ? (
+            {showSignature === "Yes" ? (
               <div className="">
                 <img
                   src={Logo2}
                   alt="Top banner"
                   className="mx-auto mb-0 w-80"
                 />
-
-                <h2 className="text-xl fixed bottom-0 font-bold text-center mt-1"></h2>
                 <div className="text-center p-1">
                   <div className="text-center text-sm">
                     <label>
                       <small>
                         {chapters.chapter_name}
                         {" : - "} {chapters.chapter_address},{" "}
-                        {chapters.chapter_city}, {chapters.chapter_state} {"  "}
+                        {chapters.chapter_city}, {chapters.chapter_state}{" "}
                         {chapters.chapter_pin}
                         <br />
-                        {"Ph.no - "} {chapters.chapter_phone}, {"Email : - "}{" "}
+                        {"Ph.no - "} {chapters.chapter_phone},{" Email : - "}{" "}
                         {chapters.chapter_email}
                       </small>
                     </label>
@@ -570,6 +589,8 @@ const SchoolAllotLetter = () => {
           </div>
         </div>
       </div>
+
+      {/* Hidden print component */}
       <div
         className="flex flex-col items-center"
         style={{
@@ -590,6 +611,7 @@ const SchoolAllotLetter = () => {
           componentRef={componentRef}
         />
       </div>
+
       {/* Email Dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
