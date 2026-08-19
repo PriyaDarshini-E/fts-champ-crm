@@ -29,13 +29,14 @@ import logoLogin from "@/assets/receipt/fts_log.png";
 // Option Lists
 const honorificList = ["Shri", "Smt.", "Kum", "Dr.", "Prof.", "Mr.", "Mrs.", "Ms."];
 const genderList = ["Male", "Female", "Other"];
-const belongsToList = [
+const belongsToList = [ 
   "Executive Committee",
   "Mahila Samiti",
   "Ekal Yuva",
   "Functional Committee",
 ];
 const donorTypeList = ["Individual", "Life Member", "Patron", "Corporate"];
+const typeList = ["Individual", "Private", "Public", "PSU", "Trust", "Society", "Others"];
 const sourceList = ["Direct", "Referral", "Event", "Online", "Other"];
 const corrPrefList = ["Residence", "Office", "Digital"];
 const bloodGroupList = ["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"];
@@ -368,7 +369,7 @@ export default function RegisterForm() {
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-5 sm:space-y-6">
-
+                
                 {/* 1. PERSONAL DETAILS */}
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 text-xs sm:text-sm p-2 rounded-md font-semibold bg-blue-600 text-white">
@@ -634,8 +635,8 @@ export default function RegisterForm() {
                             isPromotersLoading
                               ? "Loading promoters..."
                               : formData.chapterCode
-                                ? "No active promoters for this chapter (enter name)"
-                                : "Select chapter first"
+                              ? "No active promoters for this chapter (enter name)"
+                              : "Select chapter first"
                           }
                           className="h-9 text-xs mt-1 border-slate-300 w-full"
                         />
@@ -704,14 +705,18 @@ export default function RegisterForm() {
                       <Label htmlFor="type" className="text-xs font-medium text-slate-700">
                         Type
                       </Label>
-                      <Input
-                        id="type"
-                        name="type"
-                        value={formData.type}
-                        onChange={handleChange}
-                        readOnly
-                        className="h-9 text-xs mt-1 border-slate-300 bg-slate-50 w-full"
-                      />
+                      <Select value={formData.type} onValueChange={(val) => handleSelectChange("type", val)}>
+                        <SelectTrigger className="h-9 text-xs mt-1 border-slate-300 w-full">
+                          <SelectValue placeholder="Select Type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {typeList.map((item) => (
+                            <SelectItem key={item} value={item} className="text-xs">
+                              {item}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                 </div>
@@ -1034,7 +1039,8 @@ export default function RegisterForm() {
                   </div>
                 </div>
 
-                {/* 5. MEMBERSHIP & EDUCATIONAL DETAILS */}
+                {/* 5. MEMBERSHIP & EDUCATIONAL DETAILS (COMMENTED OUT) */}
+                {/* 
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 text-xs sm:text-sm p-2 rounded-md font-semibold bg-blue-600 text-white">
                     <GraduationCap className="w-4 h-4" />
@@ -1042,7 +1048,6 @@ export default function RegisterForm() {
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-                    {/* Membership Category */}
                     <div>
                       <Label htmlFor="membershipCategory" className="text-xs font-medium text-slate-700">
                         Membership Category
@@ -1061,7 +1066,6 @@ export default function RegisterForm() {
                       </Select>
                     </div>
 
-                    {/* Highest Educational Qualification */}
                     <div>
                       <Label htmlFor="highestEducation" className="text-xs font-medium text-slate-700">
                         Highest Educational Qualification
@@ -1080,7 +1084,6 @@ export default function RegisterForm() {
                       </Select>
                     </div>
 
-                    {/* Occupation */}
                     <div>
                       <Label htmlFor="occupation" className="text-xs font-medium text-slate-700">
                         Occupation
@@ -1095,7 +1098,6 @@ export default function RegisterForm() {
                       />
                     </div>
 
-                    {/* Blood Group */}
                     <div>
                       <Label htmlFor="bloodGroup" className="text-xs font-medium text-slate-700">
                         Blood Group
@@ -1114,7 +1116,6 @@ export default function RegisterForm() {
                       </Select>
                     </div>
 
-                    {/* Marital Status */}
                     <div>
                       <Label htmlFor="maritalStatus" className="text-xs font-medium text-slate-700">
                         Marital Status
@@ -1134,8 +1135,10 @@ export default function RegisterForm() {
                     </div>
                   </div>
                 </div>
+                */}
 
-                {/* 6. SPOUSE & FAMILY DETAILS */}
+                {/* 6. SPOUSE & FAMILY DETAILS (COMMENTED OUT) */}
+                {/* 
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 text-xs sm:text-sm p-2 rounded-md font-semibold bg-blue-600 text-white">
                     <Heart className="w-4 h-4" />
@@ -1143,7 +1146,6 @@ export default function RegisterForm() {
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-                    {/* Spouse Contact Number */}
                     <div>
                       <Label htmlFor="spouseContactNumber" className="text-xs font-medium text-slate-700">
                         Spouse Contact Number
@@ -1159,7 +1161,6 @@ export default function RegisterForm() {
                       />
                     </div>
 
-                    {/* Spouse Whatsapp Number */}
                     <div>
                       <Label htmlFor="spouseWhatsappNumber" className="text-xs font-medium text-slate-700">
                         Spouse Whatsapp Number
@@ -1175,7 +1176,6 @@ export default function RegisterForm() {
                       />
                     </div>
 
-                    {/* Spouse Date of Birth */}
                     <div>
                       <Label htmlFor="spouseDob" className="text-xs font-medium text-slate-700">
                         Spouse Date of Birth
@@ -1190,7 +1190,6 @@ export default function RegisterForm() {
                       />
                     </div>
 
-                    {/* Spouse PAN Card */}
                     <div>
                       <Label htmlFor="spousePanCard" className="text-xs font-medium text-slate-700">
                         Spouse PAN Card
@@ -1206,7 +1205,6 @@ export default function RegisterForm() {
                       />
                     </div>
 
-                    {/* Children Name */}
                     <div>
                       <Label htmlFor="childrenName" className="text-xs font-medium text-slate-700">
                         Children Name
@@ -1221,7 +1219,6 @@ export default function RegisterForm() {
                       />
                     </div>
 
-                    {/* Children Date Of Birth */}
                     <div>
                       <Label htmlFor="childrenDob" className="text-xs font-medium text-slate-700">
                         Children Date Of Birth
@@ -1236,7 +1233,6 @@ export default function RegisterForm() {
                       />
                     </div>
 
-                    {/* Children Blood Group */}
                     <div>
                       <Label htmlFor="childrenBloodGroup" className="text-xs font-medium text-slate-700">
                         Children Blood Group
@@ -1256,6 +1252,7 @@ export default function RegisterForm() {
                     </div>
                   </div>
                 </div>
+                */}
 
                 {/* Submit Action */}
                 <div className="pt-4 flex justify-end">
