@@ -20,6 +20,7 @@ import ClosedSchooll from "@/app/school/closed scholl/ClosesScholl";
 import Wrongallotment from "@/app/allotment-super/Wrongallotment";
 import BannerReport from "@/app/report/Banner-report/BannerReport";
 const Login = lazy(() => import("@/app/auth/login"));
+const RegisterForm = lazy(() => import("@/app/auth/register-form"));
 const DonorList = lazy(() => import("@/app/donor/donor-list/donor-list"));
 const ReceiptCreate = lazy(
   () => import("@/app/donor/donor-list/receipt-create"),
@@ -146,7 +147,16 @@ const MultiAllotment = lazy(
 
 function AppRoutes() {
   return (
+    // new Register
     <Routes>
+      <Route
+        path="/registerform"
+        element={
+          <Suspense fallback={<LoadingBar />}>
+            <RegisterForm />
+          </Suspense>
+        }
+      />
       <Route path="/" element={<AuthRoute />}>
         <Route path="/" element={<Login />} />
         <Route path="/signup" element={<SignUp />} />
