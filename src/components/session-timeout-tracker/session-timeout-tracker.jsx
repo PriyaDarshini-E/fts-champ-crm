@@ -2,10 +2,15 @@ import React from "react";
 import { AlertTriangle } from "lucide-react";
 import Cookies from "js-cookie";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "react-router-dom";
+import { isAuthRoute } from "@/routes/common/route-paths";
 
 const SessionTimeoutTracker = ({ expiryTime, onLogout }) => {
   const queryClient = useQueryClient();
+  const location = useLocation();
   const [isInitialized, setIsInitialized] = React.useState(false);
+
+  const isPublicPage = isAuthRoute(location.pathname);
 
   React.useEffect(() => {
     const initTimer = setTimeout(() => {
@@ -17,7 +22,6 @@ const SessionTimeoutTracker = ({ expiryTime, onLogout }) => {
 
   const isTokenPresent = () => {
     const token = Cookies.get("token");
-
     return !!token;
   };
 
@@ -42,12 +46,11 @@ const SessionTimeoutTracker = ({ expiryTime, onLogout }) => {
   const calculateTimeUntilExpiry = (expiryDate) => {
     const now = new Date();
     const timeUntil = expiryDate - now;
-
     return timeUntil;
   };
 
   React.useEffect(() => {
-    if (!isInitialized) return;
+    if (!isInitialized || isPublicPage) return;
 
     const originalFetch = window.fetch;
 
@@ -74,10 +77,10 @@ const SessionTimeoutTracker = ({ expiryTime, onLogout }) => {
     return () => {
       window.fetch = originalFetch;
     };
-  }, [onLogout, isInitialized]);
+  }, [onLogout, isInitialized, isPublicPage]);
 
   React.useEffect(() => {
-    if (!isInitialized) return;
+    if (!isInitialized || isPublicPage) return;
 
     const checkCookieChange = () => {
       queryClient.invalidateQueries({ queryKey: ["session-validation"] });
@@ -86,12 +89,12 @@ const SessionTimeoutTracker = ({ expiryTime, onLogout }) => {
     const interval = setInterval(checkCookieChange, 3000);
 
     return () => clearInterval(interval);
-  }, [queryClient, isInitialized]);
+  }, [queryClient, isInitialized, isPublicPage]);
 
   const { data: sessionStatus } = useQuery({
     queryKey: ["session-validation", expiryTime],
     queryFn: () => {
-      if (!isInitialized) {
+      if (!isInitialized || isPublicPage) {
         return { status: "initializing", countdown: null };
       }
 
@@ -101,7 +104,6 @@ const SessionTimeoutTracker = ({ expiryTime, onLogout }) => {
 
       const expiryDate = validateExpiryTime(expiryTime);
       if (!expiryDate) {
-      
         return { status: "valid", countdown: null };
       }
 
@@ -122,7 +124,7 @@ const SessionTimeoutTracker = ({ expiryTime, onLogout }) => {
       return { status: "valid", countdown: null };
     },
     refetchInterval: (query) => {
-      if (!isInitialized) return false;
+      if (!isInitialized || isPublicPage) return false;
 
       const state = query.state.data;
 
@@ -140,19 +142,16 @@ const SessionTimeoutTracker = ({ expiryTime, onLogout }) => {
 
       return false;
     },
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: !isPublicPage,
     staleTime: 0,
-    enabled: isInitialized,
+    enabled: isInitialized && !isPublicPage,
   });
 
   React.useEffect(() => {
-    if (sessionStatus?.status === "expired" && isTokenPresent()) {
+    if (!isPublicPage && sessionStatus?.status === "expired" && isTokenPresent()) {
       onLogout();
     }
-
-    if (sessionStatus?.status === "no-token-warning") {
-    }
-  }, [sessionStatus?.status, onLogout]);
+  }, [sessionStatus?.status, onLogout, isPublicPage]);
 
   const formatTime = (seconds) => {
     const minutes = Math.floor(seconds / 60);
@@ -162,6 +161,7 @@ const SessionTimeoutTracker = ({ expiryTime, onLogout }) => {
 
   if (
     !isInitialized ||
+    isPublicPage ||
     sessionStatus?.status !== "expiring" ||
     !isTokenPresent()
   ) {
