@@ -27,9 +27,9 @@ import BASE_URL from "@/config/base-url";
 import logoLogin from "@/assets/receipt/fts_log.png";
 
 // Option Lists
-const honorificList = ["Shri", "Smt.", "Kum", "Dr.", "Prof.", "Mr.", "Mrs.", "Ms."];
+const honorificList = ["Shri", "Smt.", "Kum", "Dr.", "Prof.", "Mr.", "Mrs.", "Ms.", "M/s"];
 const genderList = ["Male", "Female", "Other"];
-const belongsToList = [ 
+const belongsToList = [
   "Executive Committee",
   "Mahila Samiti",
   "Ekal Yuva",
@@ -76,7 +76,10 @@ export default function RegisterForm() {
     belongTo: "",
     source: "",
     donorType: "",
-    type: "Individual",
+    type: "",
+    contactName: "",
+    designation: "",
+    csr: "",
 
     // Communication Details
     contactNumber: "",
@@ -100,7 +103,7 @@ export default function RegisterForm() {
     offCity: "",
     offState: "",
     offPincode: "",
-    corrPreference: "Residence",
+    corrPreference: "",
 
     // Additional & Membership Details
     membershipCategory: "",
@@ -214,7 +217,9 @@ export default function RegisterForm() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsSubmitting(true);
+    setIsSubmitting(true);  
+
+    const isCompany = formData.type && formData.type !== "Individual";
 
     try {
       const payload = {
@@ -223,19 +228,22 @@ export default function RegisterForm() {
         indicomp_full_name: formData.fullName,
         title: formData.title,
         indicomp_is_promoter: formData.isPromoter,
-        indicomp_type: formData.type,
+        indicomp_type: formData.type || "Individual",
         indicomp_pan_no: formData.panCard,
-        indicomp_father_name: formData.fatherName,
-        indicomp_mother_name: formData.motherName,
+        indicomp_com_contact_name: isCompany ? (formData.contactName || "") : "",
+        indicomp_com_contact_designation: isCompany ? (formData.designation || "") : "",
+        indicomp_father_name: !isCompany ? formData.fatherName : "",
+        indicomp_mother_name: !isCompany ? formData.motherName : "",
         indicomp_gender: formData.gender,
-        indicomp_spouse_name: formData.spouseName,
+        indicomp_spouse_name: !isCompany ? formData.spouseName : "",
         indicomp_dob_annualday: formData.dob,
-        indicomp_doa: formData.marriageDate,
+        indicomp_doa: !isCompany ? formData.marriageDate : "",
         indicomp_remarks: formData.remarks,
         indicomp_promoter: formData.promoter,
         indicomp_belongs_to: formData.belongTo,
         indicomp_source: formData.source,
         indicomp_donor_type: formData.donorType,
+        indicomp_csr: isCompany ? (formData.csr || "") : "",
         indicomp_mobile_phone: formData.contactNumber,
         indicomp_mobile_whatsapp: formData.whatsappNumber,
         indicomp_email: formData.emailId,
@@ -369,357 +377,435 @@ export default function RegisterForm() {
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-5 sm:space-y-6">
-                
-                {/* 1. PERSONAL DETAILS */}
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-xs sm:text-sm p-2 rounded-md font-semibold bg-blue-600 text-white">
-                    <Info className="w-4 h-4" />
-                    Personal Details
-                  </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-                    {/* Chapter Dropdown */}
-                    <div>
-                      <Label htmlFor="chapter" className="text-xs font-medium text-slate-700">
-                        Chapter
-                      </Label>
-                      <Select
-                        value={formData.chapterCode}
-                        onValueChange={handleChapterChange}
-                      >
-                        <SelectTrigger className="h-9 text-xs mt-1 border-slate-300 w-full">
-                          <SelectValue placeholder={isChaptersLoading ? "Loading chapters..." : "Select Chapter"} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {chapters.map((ch) => {
-                            const val = String(ch.chapter_code || ch.id || ch.chapter_id);
-                            const label = ch.chapter_name || ch.chapter || ch.name || val;
-                            return (
-                              <SelectItem key={val} value={val} className="text-xs">
-                                {label}
-                              </SelectItem>
-                            );
-                          })}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                {/* 1. PERSONAL DETAILS / COMPANY DETAILS */}
+                {(() => {
+                  const isCompany = formData.type && formData.type !== "Individual";
+                  return (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2 text-xs sm:text-sm p-2 rounded-md font-semibold bg-blue-600 text-white">
+                        <Info className="w-4 h-4" />
+                        {isCompany ? "Company Details" : "Personal Details"}
+                      </div>
 
-                    {/* Title */}
-                    <div>
-                      <Label htmlFor="title" className="text-xs font-medium text-slate-700">
-                        Title
-                      </Label>
-                      <Select value={formData.title} onValueChange={(val) => handleSelectChange("title", val)}>
-                        <SelectTrigger className="h-9 text-xs mt-1 border-slate-300 w-full">
-                          <SelectValue placeholder="Select Title" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {honorificList.map((item) => (
-                            <SelectItem key={item} value={item} className="text-xs">
-                              {item}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+                        {/* Chapter Dropdown */}
+                        <div>
+                          <Label htmlFor="chapter" className="text-xs font-medium text-slate-700">
+                            Chapter
+                          </Label>
+                          <Select
+                            value={formData.chapterCode}
+                            onValueChange={handleChapterChange}
+                          >
+                            <SelectTrigger className="h-9 text-xs mt-1 border-slate-300 w-full">
+                              <SelectValue placeholder={isChaptersLoading ? "Loading chapters..." : "Select Chapter"} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {chapters.map((ch) => {
+                                const val = String(ch.chapter_code || ch.id || ch.chapter_id);
+                                const label = ch.chapter_name || ch.chapter || ch.name || val;
+                                return (
+                                  <SelectItem key={val} value={val} className="text-xs">
+                                    {label}
+                                  </SelectItem>
+                                );
+                              })}
+                            </SelectContent>
+                          </Select>
+                        </div>
 
-                    {/* Applicant Name / Full Name */}
-                    <div>
-                      <Label htmlFor="fullName" className="text-xs font-medium text-slate-700">
-                        Applicant Name
-                      </Label>
-                      <Input
-                        id="fullName"
-                        name="fullName"
-                        value={formData.fullName}
-                        onChange={handleChange}
-                        placeholder="Enter applicant full name"
-                        className="h-9 text-xs mt-1 border-slate-300 w-full"
-                      />
-                    </div>
+                        {/* Type Dropdown */}
+                        <div>
+                          <Label htmlFor="type" className="text-xs font-medium text-slate-700">
+                            Type
+                          </Label>
+                          <Select value={formData.type} onValueChange={(val) => handleSelectChange("type", val)}>
+                            <SelectTrigger className="h-9 text-xs mt-1 border-slate-300 w-full">
+                              <SelectValue placeholder="Select Type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {typeList.map((item) => (
+                                <SelectItem key={item} value={item} className="text-xs">
+                                  {item}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
 
-                    {/* Father Name */}
-                    <div>
-                      <Label htmlFor="fatherName" className="text-xs font-medium text-slate-700">
-                        Father Name
-                      </Label>
-                      <Input
-                        id="fatherName"
-                        name="fatherName"
-                        value={formData.fatherName}
-                        onChange={handleChange}
-                        placeholder="Enter father's name"
-                        className="h-9 text-xs mt-1 border-slate-300 w-full"
-                      />
-                    </div>
+                        {/* Title */}
+                        <div>
+                          <Label htmlFor="title" className="text-xs font-medium text-slate-700">
+                            Title
+                          </Label>
+                          <Select value={formData.title} onValueChange={(val) => handleSelectChange("title", val)}>
+                            <SelectTrigger className="h-9 text-xs mt-1 border-slate-300 w-full">
+                              <SelectValue placeholder="Select Title" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {honorificList.map((item) => (
+                                <SelectItem key={item} value={item} className="text-xs">
+                                  {item}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
 
-                    {/* Mother Name */}
-                    <div>
-                      <Label htmlFor="motherName" className="text-xs font-medium text-slate-700">
-                        Mother Name
-                      </Label>
-                      <Input
-                        id="motherName"
-                        name="motherName"
-                        value={formData.motherName}
-                        onChange={handleChange}
-                        placeholder="Enter mother's name"
-                        className="h-9 text-xs mt-1 border-slate-300 w-full"
-                      />
-                    </div>
+                        {/* Full Name / Company Name */}
+                        <div>
+                          <Label htmlFor="fullName" className="text-xs font-medium text-slate-700">
+                            {isCompany ? "Company Name" : "Full Name"}
+                          </Label>
+                          <Input
+                            id="fullName"
+                            name="fullName"
+                            value={formData.fullName}
+                            onChange={handleChange}
+                            placeholder={isCompany ? "Enter company name" : "Enter full name"}
+                            className="h-9 text-xs mt-1 border-slate-300 w-full"
+                          />
+                        </div>
 
-                    {/* Gender */}
-                    <div>
-                      <Label htmlFor="gender" className="text-xs font-medium text-slate-700">
-                        Gender
-                      </Label>
-                      <Select value={formData.gender} onValueChange={(val) => handleSelectChange("gender", val)}>
-                        <SelectTrigger className="h-9 text-xs mt-1 border-slate-300 w-full">
-                          <SelectValue placeholder="Select Gender" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {genderList.map((item) => (
-                            <SelectItem key={item} value={item} className="text-xs">
-                              {item}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {/* Spouse Name */}
-                    <div>
-                      <Label htmlFor="spouseName" className="text-xs font-medium text-slate-700">
-                        Spouse Name
-                      </Label>
-                      <Input
-                        id="spouseName"
-                        name="spouseName"
-                        value={formData.spouseName}
-                        onChange={handleChange}
-                        placeholder="Enter spouse name"
-                        className="h-9 text-xs mt-1 border-slate-300 w-full"
-                      />
-                    </div>
-
-                    {/* Date of Birth */}
-                    <div>
-                      <Label htmlFor="dob" className="text-xs font-medium text-slate-700">
-                        Date of Birth
-                      </Label>
-                      <Input
-                        id="dob"
-                        name="dob"
-                        type="date"
-                        value={formData.dob}
-                        onChange={handleChange}
-                        className="h-9 text-xs mt-1 border-slate-300 w-full"
-                      />
-                    </div>
-
-                    {/* Marriage Date / Date of Anniversary */}
-                    <div>
-                      <Label htmlFor="marriageDate" className="text-xs font-medium text-slate-700">
-                        Marriage Date
-                      </Label>
-                      <Input
-                        id="marriageDate"
-                        name="marriageDate"
-                        type="date"
-                        value={formData.marriageDate}
-                        onChange={handleChange}
-                        className="h-9 text-xs mt-1 border-slate-300 w-full"
-                      />
-                    </div>
-
-                    {/* PAN Card */}
-                    <div>
-                      <Label htmlFor="panCard" className="text-xs font-medium text-slate-700">
-                        PAN Card
-                      </Label>
-                      <Input
-                        id="panCard"
-                        name="panCard"
-                        value={formData.panCard}
-                        onChange={handleChange}
-                        placeholder="Enter PAN number"
-                        maxLength={10}
-                        className="h-9 text-xs mt-1 border-slate-300 uppercase w-full"
-                      />
-                    </div>
-
-                    {/* Passport Size Photograph */}
-                    <div>
-                      <Label htmlFor="photo" className="text-xs font-medium text-slate-700">
-                        Passport Size Photograph
-                      </Label>
-                      <div className="flex items-center gap-2 mt-1">
-                        <Input
-                          id="photo"
-                          type="file"
-                          accept="image/*"
-                          onChange={handlePhotoChange}
-                          className="h-9 text-xs border-slate-300 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-blue-50 file:text-blue-700 w-full"
-                        />
-                        {photoPreview && (
-                          <img src={photoPreview} alt="Preview" className="h-9 w-9 rounded object-cover border border-slate-300 shrink-0" />
+                        {/* Father Name (Individual) / Contact Name (Company) */}
+                        {isCompany ? (
+                          <div>
+                            <Label htmlFor="contactName" className="text-xs font-medium text-slate-700">
+                              Contact Name
+                            </Label>
+                            <Input
+                              id="contactName"
+                              name="contactName"
+                              value={formData.contactName || ""}
+                              onChange={handleChange}
+                              placeholder="Enter contact name"
+                              className="h-9 text-xs mt-1 border-slate-300 w-full"
+                            />
+                          </div>
+                        ) : (
+                          <div>
+                            <Label htmlFor="fatherName" className="text-xs font-medium text-slate-700">
+                              Father Name
+                            </Label>
+                            <Input
+                              id="fatherName"
+                              name="fatherName"
+                              value={formData.fatherName}
+                              onChange={handleChange}
+                              placeholder="Enter father's name"
+                              className="h-9 text-xs mt-1 border-slate-300 w-full"
+                            />
+                          </div>
                         )}
+
+                        {/* Mother Name (Individual) / Designation (Company) */}
+                        {isCompany ? (
+                          <div>
+                            <Label htmlFor="designation" className="text-xs font-medium text-slate-700">
+                              Designation
+                            </Label>
+                            <Input
+                              id="designation"
+                              name="designation"
+                              value={formData.designation || ""}
+                              onChange={handleChange}
+                              placeholder="Enter designation"
+                              className="h-9 text-xs mt-1 border-slate-300 w-full"
+                            />
+                          </div>
+                        ) : (
+                          <div>
+                            <Label htmlFor="motherName" className="text-xs font-medium text-slate-700">
+                              Mother Name
+                            </Label>
+                            <Input
+                              id="motherName"
+                              name="motherName"
+                              value={formData.motherName}
+                              onChange={handleChange}
+                              placeholder="Enter mother's name"
+                              className="h-9 text-xs mt-1 border-slate-300 w-full"
+                            />
+                          </div>
+                        )}
+
+                        {/* Gender */}
+                        <div>
+                          <Label htmlFor="gender" className="text-xs font-medium text-slate-700">
+                            Gender
+                          </Label>
+                          <Select value={formData.gender} onValueChange={(val) => handleSelectChange("gender", val)}>
+                            <SelectTrigger className="h-9 text-xs mt-1 border-slate-300 w-full">
+                              <SelectValue placeholder="Select Gender" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {genderList.map((item) => (
+                                <SelectItem key={item} value={item} className="text-xs">
+                                  {item}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Date of Birth / Annual Day */}
+                        <div>
+                          <Label htmlFor="dob" className="text-xs font-medium text-slate-700">
+                            {isCompany ? "Annual Day" : "Date of Birth"}
+                          </Label>
+                          <Input
+                            id="dob"
+                            name="dob"
+                            type="date"
+                            value={formData.dob}
+                            onChange={handleChange}
+                            className="h-9 text-xs mt-1 border-slate-300 w-full"
+                          />
+                        </div>
+
+                        {/* Upload Image / Logo */}
+                        <div>
+                          <Label htmlFor="photo" className="text-xs font-medium text-slate-700">
+                            {isCompany ? "Upload Company Logo" : "Upload Image"}
+                          </Label>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Input
+                              id="photo"
+                              type="file"
+                              accept="image/*"
+                              onChange={handlePhotoChange}
+                              className="h-9 text-xs border-slate-300 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-blue-50 file:text-blue-700 w-full"
+                            />
+                            {photoPreview && (
+                              <img src={photoPreview} alt="Preview" className="h-9 w-9 rounded object-cover border border-slate-300 shrink-0" />
+                            )}
+                          </div>
+                        </div>
+
+                        {/* PAN Number */}
+                        <div>
+                          <Label htmlFor="panCard" className="text-xs font-medium text-slate-700">
+                            PAN Number
+                          </Label>
+                          <Input
+                            id="panCard"
+                            name="panCard"
+                            value={formData.panCard}
+                            onChange={handleChange}
+                            placeholder="Enter PAN number"
+                            maxLength={10}
+                            className="h-9 text-xs mt-1 border-slate-300 uppercase w-full"
+                          />
+                        </div>
+
+                        {/* Remarks */}
+                        <div>
+                          <Label htmlFor="remarks" className="text-xs font-medium text-slate-700">
+                            Remarks
+                          </Label>
+                          <Input
+                            id="remarks"
+                            name="remarks"
+                            value={formData.remarks}
+                            onChange={handleChange}
+                            placeholder="Enter remarks"
+                            className="h-9 text-xs mt-1 border-slate-300 w-full"
+                          />
+                        </div>
+
+                        {/* Spouse Name (Individual Only) */}
+                        {!isCompany && (
+                          <div>
+                            <Label htmlFor="spouseName" className="text-xs font-medium text-slate-700">
+                              Spouse Name
+                            </Label>
+                            <Input
+                              id="spouseName"
+                              name="spouseName"
+                              value={formData.spouseName}
+                              onChange={handleChange}
+                              placeholder="Enter spouse name"
+                              className="h-9 text-xs mt-1 border-slate-300 w-full"
+                            />
+                          </div>
+                        )}
+
+                        {/* Date of Anniversary (Individual Only) */}
+                        {!isCompany && (
+                          <div>
+                            <Label htmlFor="marriageDate" className="text-xs font-medium text-slate-700">
+                              Date of Anniversary
+                            </Label>
+                            <Input
+                              id="marriageDate"
+                              name="marriageDate"
+                              type="date"
+                              value={formData.marriageDate}
+                              onChange={handleChange}
+                              className="h-9 text-xs mt-1 border-slate-300 w-full"
+                            />
+                          </div>
+                        )}
+
+                        {/* Is Promoter? */}
+                        <div>
+                          <Label htmlFor="isPromoter" className="text-xs font-medium text-slate-700">
+                            Is Promoter?
+                          </Label>
+                          <Select value={formData.isPromoter} onValueChange={(val) => handleSelectChange("isPromoter", val)}>
+                            <SelectTrigger className="h-9 text-xs mt-1 border-slate-300 w-full">
+                              <SelectValue placeholder="Select" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Yes" className="text-xs">Yes</SelectItem>
+                              <SelectItem value="No" className="text-xs">No</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Promoter (Dynamic from Chapter) */}
+                        <div>
+                          <Label htmlFor="promoter" className="text-xs font-medium text-slate-700">
+                            Promoter
+                          </Label>
+                          {promoters.length > 0 ? (
+                            <Select
+                              value={formData.promoter}
+                              onValueChange={(val) => handleSelectChange("promoter", val)}
+                            >
+                              <SelectTrigger className="h-9 text-xs mt-1 border-slate-300 w-full">
+                                <SelectValue placeholder={isPromotersLoading ? "Loading promoters..." : "Select Promoter"} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {promoters.map((p, index) => {
+                                  const name = p.indicomp_full_name || p.promoter_name || p.name || (typeof p === "string" ? p : "");
+                                  const titlePrefix = p.title ? `${p.title} ` : "";
+                                  const val = String(name || p.id || index);
+                                  const label = name ? `${titlePrefix}${name}` : val;
+                                  return (
+                                    <SelectItem key={`${val}-${index}`} value={val} className="text-xs">
+                                      {label}
+                                    </SelectItem>
+                                  );
+                                })}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <Input
+                              id="promoter"
+                              name="promoter"
+                              value={formData.promoter}
+                              onChange={handleChange}
+                              placeholder={
+                                isPromotersLoading
+                                  ? "Loading promoters..."
+                                  : formData.chapterCode
+                                    ? "No active promoters for this chapter (enter name)"
+                                    : "Select chapter first"
+                              }
+                              className="h-9 text-xs mt-1 border-slate-300 w-full"
+                            />
+                          )}
+                        </div>
+
+                        {/* Belong To */}
+                        <div>
+                          <Label htmlFor="belongTo" className="text-xs font-medium text-slate-700">
+                            Belong To
+                          </Label>
+                          <Select value={formData.belongTo} onValueChange={(val) => handleSelectChange("belongTo", val)}>
+                            <SelectTrigger className="h-9 text-xs mt-1 border-slate-300 w-full">
+                              <SelectValue placeholder="Select Belong To" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {belongsToList.map((item) => (
+                                <SelectItem key={item} value={item} className="text-xs">
+                                  {item}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Source */}
+                        <div>
+                          <Label htmlFor="source" className="text-xs font-medium text-slate-700">
+                            Source
+                          </Label>
+                          <Select value={formData.source} onValueChange={(val) => handleSelectChange("source", val)}>
+                            <SelectTrigger className="h-9 text-xs mt-1 border-slate-300 w-full">
+                              <SelectValue placeholder="Select Source" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {sourceList.map((item) => (
+                                <SelectItem key={item} value={item} className="text-xs">
+                                  {item}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Donor Type */}
+                        <div>
+                          <Label htmlFor="donorType" className="text-xs font-medium text-slate-700">
+                            Donor Type
+                          </Label>
+                          <Select value={formData.donorType} onValueChange={(val) => handleSelectChange("donorType", val)}>
+                            <SelectTrigger className="h-9 text-xs mt-1 border-slate-300 w-full">
+                              <SelectValue placeholder="Select Donor Type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {donorTypeList.map((item) => (
+                                <SelectItem key={item} value={item} className="text-xs">
+                                  {item}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* CSR Dropdown (Company Only) */}
+                        {isCompany && (
+                          <div>
+                            <Label htmlFor="csr" className="text-xs font-medium text-slate-700">
+                              CSR
+                            </Label>
+                            <Select value={formData.csr} onValueChange={(val) => handleSelectChange("csr", val)}>
+                              <SelectTrigger className="h-9 text-xs mt-1 border-slate-300 w-full">
+                                <SelectValue placeholder="Select CSR" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Yes" className="text-xs">Yes</SelectItem>
+                                <SelectItem value="No" className="text-xs">No</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+
+                        {/* Correspondence Preference */}
+                        <div>
+                          <Label htmlFor="corrPreference" className="text-xs font-medium text-slate-700">
+                            Correspondence Preference
+                          </Label>
+                          <Select value={formData.corrPreference} onValueChange={(val) => handleSelectChange("corrPreference", val)}>
+                            <SelectTrigger className="h-9 text-xs mt-1 border-slate-300 w-full">
+                              <SelectValue placeholder="Select Preference" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {corrPrefList.map((item) => (
+                                <SelectItem key={item} value={item} className="text-xs">
+                                  {item}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
                     </div>
-
-                    {/* Remarks */}
-                    <div>
-                      <Label htmlFor="remarks" className="text-xs font-medium text-slate-700">
-                        Remarks
-                      </Label>
-                      <Input
-                        id="remarks"
-                        name="remarks"
-                        value={formData.remarks}
-                        onChange={handleChange}
-                        placeholder="Enter remarks"
-                        className="h-9 text-xs mt-1 border-slate-300 w-full"
-                      />
-                    </div>
-
-                    {/* Is Promoter? */}
-                    <div>
-                      <Label htmlFor="isPromoter" className="text-xs font-medium text-slate-700">
-                        Is Promoter?
-                      </Label>
-                      <Select value={formData.isPromoter} onValueChange={(val) => handleSelectChange("isPromoter", val)}>
-                        <SelectTrigger className="h-9 text-xs mt-1 border-slate-300 w-full">
-                          <SelectValue placeholder="Select" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Yes" className="text-xs">Yes</SelectItem>
-                          <SelectItem value="No" className="text-xs">No</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {/* Promoter (Dynamic from Chapter) */}
-                    <div>
-                      <Label htmlFor="promoter" className="text-xs font-medium text-slate-700">
-                        Promoter
-                      </Label>
-                      {promoters.length > 0 ? (
-                        <Select
-                          value={formData.promoter}
-                          onValueChange={(val) => handleSelectChange("promoter", val)}
-                        >
-                          <SelectTrigger className="h-9 text-xs mt-1 border-slate-300 w-full">
-                            <SelectValue placeholder={isPromotersLoading ? "Loading promoters..." : "Select Promoter"} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {promoters.map((p, index) => {
-                              const name = p.indicomp_full_name || p.promoter_name || p.name || (typeof p === "string" ? p : "");
-                              const titlePrefix = p.title ? `${p.title} ` : "";
-                              const val = String(name || p.id || index);
-                              const label = name ? `${titlePrefix}${name}` : val;
-                              return (
-                                <SelectItem key={`${val}-${index}`} value={val} className="text-xs">
-                                  {label}
-                                </SelectItem>
-                              );
-                            })}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <Input
-                          id="promoter"
-                          name="promoter"
-                          value={formData.promoter}
-                          onChange={handleChange}
-                          placeholder={
-                            isPromotersLoading
-                              ? "Loading promoters..."
-                              : formData.chapterCode
-                              ? "No active promoters for this chapter (enter name)"
-                              : "Select chapter first"
-                          }
-                          className="h-9 text-xs mt-1 border-slate-300 w-full"
-                        />
-                      )}
-                    </div>
-
-                    {/* Belong To */}
-                    <div>
-                      <Label htmlFor="belongTo" className="text-xs font-medium text-slate-700">
-                        Belong To
-                      </Label>
-                      <Select value={formData.belongTo} onValueChange={(val) => handleSelectChange("belongTo", val)}>
-                        <SelectTrigger className="h-9 text-xs mt-1 border-slate-300 w-full">
-                          <SelectValue placeholder="Select Belong To" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {belongsToList.map((item) => (
-                            <SelectItem key={item} value={item} className="text-xs">
-                              {item}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {/* Source */}
-                    <div>
-                      <Label htmlFor="source" className="text-xs font-medium text-slate-700">
-                        Source
-                      </Label>
-                      <Select value={formData.source} onValueChange={(val) => handleSelectChange("source", val)}>
-                        <SelectTrigger className="h-9 text-xs mt-1 border-slate-300 w-full">
-                          <SelectValue placeholder="Select Source" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {sourceList.map((item) => (
-                            <SelectItem key={item} value={item} className="text-xs">
-                              {item}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {/* Donor Type */}
-                    <div>
-                      <Label htmlFor="donorType" className="text-xs font-medium text-slate-700">
-                        Donor Type
-                      </Label>
-                      <Select value={formData.donorType} onValueChange={(val) => handleSelectChange("donorType", val)}>
-                        <SelectTrigger className="h-9 text-xs mt-1 border-slate-300 w-full">
-                          <SelectValue placeholder="Select Donor Type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {donorTypeList.map((item) => (
-                            <SelectItem key={item} value={item} className="text-xs">
-                              {item}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {/* Type */}
-                    <div>
-                      <Label htmlFor="type" className="text-xs font-medium text-slate-700">
-                        Type
-                      </Label>
-                      <Select value={formData.type} onValueChange={(val) => handleSelectChange("type", val)}>
-                        <SelectTrigger className="h-9 text-xs mt-1 border-slate-300 w-full">
-                          <SelectValue placeholder="Select Type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {typeList.map((item) => (
-                            <SelectItem key={item} value={item} className="text-xs">
-                              {item}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </div>
+                  );
+                })()}
 
                 {/* 2. COMMUNICATION DETAILS */}
                 <div className="space-y-3">
@@ -729,10 +815,10 @@ export default function RegisterForm() {
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-                    {/* Contact Number */}
+                    {/* Mobile Phone */}
                     <div>
                       <Label htmlFor="contactNumber" className="text-xs font-medium text-slate-700">
-                        Contact Number
+                        Mobile Phone
                       </Label>
                       <Input
                         id="contactNumber"
@@ -810,234 +896,219 @@ export default function RegisterForm() {
                   </div>
                 </div>
 
-                {/* 3. RESIDENCE ADDRESS */}
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-xs sm:text-sm p-2 rounded-md font-semibold bg-blue-600 text-white">
-                    <Home className="w-4 h-4" />
-                    Residence Address
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-                    {/* House & Street Number */}
-                    <div>
-                      <Label htmlFor="resHouseStreet" className="text-xs font-medium text-slate-700">
-                        House & Street Number
-                      </Label>
-                      <Input
-                        id="resHouseStreet"
-                        name="resHouseStreet"
-                        value={formData.resHouseStreet}
-                        onChange={handleChange}
-                        placeholder="Enter house / street number"
-                        className="h-9 text-xs mt-1 border-slate-300 w-full"
-                      />
+                {/* 3. RESIDENCE ADDRESS (Only if Residence / Registered selected) */}
+                {(formData.corrPreference === "Residence" || formData.corrPreference === "Registered") && (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-xs sm:text-sm p-2 rounded-md font-semibold bg-blue-600 text-white">
+                      <Home className="w-4 h-4" />
+                      Residence Address
                     </div>
 
-                    {/* Area */}
-                    <div>
-                      <Label htmlFor="resArea" className="text-xs font-medium text-slate-700">
-                        Area
-                      </Label>
-                      <Input
-                        id="resArea"
-                        name="resArea"
-                        value={formData.resArea}
-                        onChange={handleChange}
-                        placeholder="Enter area"
-                        className="h-9 text-xs mt-1 border-slate-300 w-full"
-                      />
-                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+                      {/* House & Street Number */}
+                      <div>
+                        <Label htmlFor="resHouseStreet" className="text-xs font-medium text-slate-700">
+                          House & Street Number
+                        </Label>
+                        <Input
+                          id="resHouseStreet"
+                          name="resHouseStreet"
+                          value={formData.resHouseStreet}
+                          onChange={handleChange}
+                          placeholder="Enter house / street number"
+                          className="h-9 text-xs mt-1 border-slate-300 w-full"
+                        />
+                      </div>
 
-                    {/* Landmark */}
-                    <div>
-                      <Label htmlFor="resLandmark" className="text-xs font-medium text-slate-700">
-                        Landmark
-                      </Label>
-                      <Input
-                        id="resLandmark"
-                        name="resLandmark"
-                        value={formData.resLandmark}
-                        onChange={handleChange}
-                        placeholder="Enter landmark"
-                        className="h-9 text-xs mt-1 border-slate-300 w-full"
-                      />
-                    </div>
+                      {/* Area */}
+                      <div>
+                        <Label htmlFor="resArea" className="text-xs font-medium text-slate-700">
+                          Area
+                        </Label>
+                        <Input
+                          id="resArea"
+                          name="resArea"
+                          value={formData.resArea}
+                          onChange={handleChange}
+                          placeholder="Enter area"
+                          className="h-9 text-xs mt-1 border-slate-300 w-full"
+                        />
+                      </div>
 
-                    {/* City */}
-                    <div>
-                      <Label htmlFor="resCity" className="text-xs font-medium text-slate-700">
-                        City
-                      </Label>
-                      <Input
-                        id="resCity"
-                        name="resCity"
-                        value={formData.resCity}
-                        onChange={handleChange}
-                        placeholder="Enter city"
-                        className="h-9 text-xs mt-1 border-slate-300 w-full"
-                      />
-                    </div>
+                      {/* Landmark */}
+                      <div>
+                        <Label htmlFor="resLandmark" className="text-xs font-medium text-slate-700">
+                          Landmark
+                        </Label>
+                        <Input
+                          id="resLandmark"
+                          name="resLandmark"
+                          value={formData.resLandmark}
+                          onChange={handleChange}
+                          placeholder="Enter landmark"
+                          className="h-9 text-xs mt-1 border-slate-300 w-full"
+                        />
+                      </div>
 
-                    {/* State */}
-                    <div>
-                      <Label htmlFor="resState" className="text-xs font-medium text-slate-700">
-                        State
-                      </Label>
-                      <Select value={formData.resState} onValueChange={(val) => handleSelectChange("resState", val)}>
-                        <SelectTrigger className="h-9 text-xs mt-1 border-slate-300 w-full">
-                          <SelectValue placeholder="Select State" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {indianStates.map((state) => (
-                            <SelectItem key={state} value={state} className="text-xs">
-                              {state}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                      {/* City */}
+                      <div>
+                        <Label htmlFor="resCity" className="text-xs font-medium text-slate-700">
+                          City
+                        </Label>
+                        <Input
+                          id="resCity"
+                          name="resCity"
+                          value={formData.resCity}
+                          onChange={handleChange}
+                          placeholder="Enter city"
+                          className="h-9 text-xs mt-1 border-slate-300 w-full"
+                        />
+                      </div>
 
-                    {/* Pincode */}
-                    <div>
-                      <Label htmlFor="resPincode" className="text-xs font-medium text-slate-700">
-                        Pincode
-                      </Label>
-                      <Input
-                        id="resPincode"
-                        name="resPincode"
-                        value={formData.resPincode}
-                        onChange={handleChange}
-                        placeholder="Enter pincode"
-                        maxLength={6}
-                        className="h-9 text-xs mt-1 border-slate-300 w-full"
-                      />
-                    </div>
-                  </div>
-                </div>
+                      {/* State */}
+                      <div>
+                        <Label htmlFor="resState" className="text-xs font-medium text-slate-700">
+                          State
+                        </Label>
+                        <Select value={formData.resState} onValueChange={(val) => handleSelectChange("resState", val)}>
+                          <SelectTrigger className="h-9 text-xs mt-1 border-slate-300 w-full">
+                            <SelectValue placeholder="Select State" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {indianStates.map((state) => (
+                              <SelectItem key={state} value={state} className="text-xs">
+                                {state}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
 
-                {/* 4. OFFICE ADDRESS */}
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-xs sm:text-sm p-2 rounded-md font-semibold bg-blue-600 text-white">
-                    <Building className="w-4 h-4" />
-                    Office Address
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-                    {/* Office & Street Number */}
-                    <div>
-                      <Label htmlFor="offHouseStreet" className="text-xs font-medium text-slate-700">
-                        Office & Street Number
-                      </Label>
-                      <Input
-                        id="offHouseStreet"
-                        name="offHouseStreet"
-                        value={formData.offHouseStreet}
-                        onChange={handleChange}
-                        placeholder="Enter office address"
-                        className="h-9 text-xs mt-1 border-slate-300 w-full"
-                      />
-                    </div>
-
-                    {/* Area */}
-                    <div>
-                      <Label htmlFor="offArea" className="text-xs font-medium text-slate-700">
-                        Area
-                      </Label>
-                      <Input
-                        id="offArea"
-                        name="offArea"
-                        value={formData.offArea}
-                        onChange={handleChange}
-                        placeholder="Enter area"
-                        className="h-9 text-xs mt-1 border-slate-300 w-full"
-                      />
-                    </div>
-
-                    {/* Landmark */}
-                    <div>
-                      <Label htmlFor="offLandmark" className="text-xs font-medium text-slate-700">
-                        Landmark
-                      </Label>
-                      <Input
-                        id="offLandmark"
-                        name="offLandmark"
-                        value={formData.offLandmark}
-                        onChange={handleChange}
-                        placeholder="Enter landmark"
-                        className="h-9 text-xs mt-1 border-slate-300 w-full"
-                      />
-                    </div>
-
-                    {/* City */}
-                    <div>
-                      <Label htmlFor="offCity" className="text-xs font-medium text-slate-700">
-                        City
-                      </Label>
-                      <Input
-                        id="offCity"
-                        name="offCity"
-                        value={formData.offCity}
-                        onChange={handleChange}
-                        placeholder="Enter city"
-                        className="h-9 text-xs mt-1 border-slate-300 w-full"
-                      />
-                    </div>
-
-                    {/* State */}
-                    <div>
-                      <Label htmlFor="offState" className="text-xs font-medium text-slate-700">
-                        State
-                      </Label>
-                      <Select value={formData.offState} onValueChange={(val) => handleSelectChange("offState", val)}>
-                        <SelectTrigger className="h-9 text-xs mt-1 border-slate-300 w-full">
-                          <SelectValue placeholder="Select State" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {indianStates.map((state) => (
-                            <SelectItem key={state} value={state} className="text-xs">
-                              {state}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {/* Pincode */}
-                    <div>
-                      <Label htmlFor="offPincode" className="text-xs font-medium text-slate-700">
-                        Pincode
-                      </Label>
-                      <Input
-                        id="offPincode"
-                        name="offPincode"
-                        value={formData.offPincode}
-                        onChange={handleChange}
-                        placeholder="Enter pincode"
-                        maxLength={6}
-                        className="h-9 text-xs mt-1 border-slate-300 w-full"
-                      />
-                    </div>
-
-                    {/* Correspondence Preference */}
-                    <div>
-                      <Label htmlFor="corrPreference" className="text-xs font-medium text-slate-700">
-                        Correspondence Preference
-                      </Label>
-                      <Select value={formData.corrPreference} onValueChange={(val) => handleSelectChange("corrPreference", val)}>
-                        <SelectTrigger className="h-9 text-xs mt-1 border-slate-300 w-full">
-                          <SelectValue placeholder="Select Preference" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {corrPrefList.map((item) => (
-                            <SelectItem key={item} value={item} className="text-xs">
-                              {item}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      {/* Pincode */}
+                      <div>
+                        <Label htmlFor="resPincode" className="text-xs font-medium text-slate-700">
+                          Pincode
+                        </Label>
+                        <Input
+                          id="resPincode"
+                          name="resPincode"
+                          value={formData.resPincode}
+                          onChange={handleChange}
+                          placeholder="Enter pincode"
+                          maxLength={6}
+                          className="h-9 text-xs mt-1 border-slate-300 w-full"
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
+
+                {/* 4. OFFICE ADDRESS (Only if Office / Branch selected) */}
+                {(formData.corrPreference === "Office" || formData.corrPreference === "Branch" || formData.corrPreference === "Office/Branch" || formData.corrPreference === "Branch Office") && (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-xs sm:text-sm p-2 rounded-md font-semibold bg-blue-600 text-white">
+                      <Building className="w-4 h-4" />
+                      Office Address
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+                      {/* Office & Street Number */}
+                      <div>
+                        <Label htmlFor="offHouseStreet" className="text-xs font-medium text-slate-700">
+                          Office & Street Number
+                        </Label>
+                        <Input
+                          id="offHouseStreet"
+                          name="offHouseStreet"
+                          value={formData.offHouseStreet}
+                          onChange={handleChange}
+                          placeholder="Enter office address"
+                          className="h-9 text-xs mt-1 border-slate-300 w-full"
+                        />
+                      </div>
+
+                      {/* Area */}
+                      <div>
+                        <Label htmlFor="offArea" className="text-xs font-medium text-slate-700">
+                          Area
+                        </Label>
+                        <Input
+                          id="offArea"
+                          name="offArea"
+                          value={formData.offArea}
+                          onChange={handleChange}
+                          placeholder="Enter area"
+                          className="h-9 text-xs mt-1 border-slate-300 w-full"
+                        />
+                      </div>
+
+                      {/* Landmark */}
+                      <div>
+                        <Label htmlFor="offLandmark" className="text-xs font-medium text-slate-700">
+                          Landmark
+                        </Label>
+                        <Input
+                          id="offLandmark"
+                          name="offLandmark"
+                          value={formData.offLandmark}
+                          onChange={handleChange}
+                          placeholder="Enter landmark"
+                          className="h-9 text-xs mt-1 border-slate-300 w-full"
+                        />
+                      </div>
+
+                      {/* City */}
+                      <div>
+                        <Label htmlFor="offCity" className="text-xs font-medium text-slate-700">
+                          City
+                        </Label>
+                        <Input
+                          id="offCity"
+                          name="offCity"
+                          value={formData.offCity}
+                          onChange={handleChange}
+                          placeholder="Enter city"
+                          className="h-9 text-xs mt-1 border-slate-300 w-full"
+                        />
+                      </div>
+
+                      {/* State */}
+                      <div>
+                        <Label htmlFor="offState" className="text-xs font-medium text-slate-700">
+                          State
+                        </Label>
+                        <Select value={formData.offState} onValueChange={(val) => handleSelectChange("offState", val)}>
+                          <SelectTrigger className="h-9 text-xs mt-1 border-slate-300 w-full">
+                            <SelectValue placeholder="Select State" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {indianStates.map((state) => (
+                              <SelectItem key={state} value={state} className="text-xs">
+                                {state}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Pincode */}
+                      <div>
+                        <Label htmlFor="offPincode" className="text-xs font-medium text-slate-700">
+                          Pincode
+                        </Label>
+                        <Input
+                          id="offPincode"
+                          name="offPincode"
+                          value={formData.offPincode}
+                          onChange={handleChange}
+                          placeholder="Enter pincode"
+                          maxLength={6}
+                          className="h-9 text-xs mt-1 border-slate-300 w-full"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* 5. MEMBERSHIP & EDUCATIONAL DETAILS (COMMENTED OUT) */}
                 {/* 
