@@ -63,6 +63,7 @@ const AllReceiptDownload = () => {
     indicomp_donor_type: "",
     indicomp_promoter: "",
     chapter_id: "",
+    receipt_csr: "",
     indicomp_source: "",
   });
   const [jsonData, setJsonData] = useState(null);
@@ -156,6 +157,7 @@ const AllReceiptDownload = () => {
         indicomp_donor_type: "",
         indicomp_promoter: "",
         chapter_id: "",
+        receipt_csr: "",
         indicomp_source: "",
       });
     },
@@ -647,6 +649,26 @@ const AllReceiptDownload = () => {
                       {item.chapter_name}
                     </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="receipt_csr" className="text-sm">
+                CSR Donation
+              </Label>
+              <Select
+                value={formData.receipt_csr}
+                onValueChange={(value) =>
+                  handleSelectChange("receipt_csr", value)
+                }
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Select CSR Donation" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Yes">Yes</SelectItem>
+                  <SelectItem value="No">No</SelectItem>
                 </SelectContent>
               </Select>
             </div>

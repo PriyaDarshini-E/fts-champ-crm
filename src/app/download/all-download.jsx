@@ -11,39 +11,38 @@ import AllReceiptDownload from "@/components/all-download/all-receipt/all-receip
 const AllDownload = () => {
   return (
     <div className="p-4 max-w-full mx-auto">
-      <Tabs defaultValue="receipt" className="w-full">
-      <TabsList className="grid w-full grid-cols-6 mb-2 sticky top-16  z-10 shadow-sm">
-  <TabsTrigger value="receipt">Receipt</TabsTrigger>
-  <TabsTrigger value="donor">Donor</TabsTrigger>
-  <TabsTrigger value="school">School</TabsTrigger>
-  <TabsTrigger value="ots">EV</TabsTrigger>
-  <TabsTrigger value="team">Team</TabsTrigger>
-  <TabsTrigger value="all-receipt">All Receipt</TabsTrigger>
-</TabsList>
+      <Tabs defaultValue="all-receipt" className="w-full">
+        <TabsList className="grid w-full grid-cols-6 mb-2 sticky top-16 z-10 shadow-sm">
+          <TabsTrigger value="all-receipt">All Receipt</TabsTrigger>
+          <TabsTrigger value="receipt">Receipt</TabsTrigger>
+          <TabsTrigger value="donor">Donor</TabsTrigger>
+          <TabsTrigger value="school">School</TabsTrigger>
+          <TabsTrigger value="ots">EV</TabsTrigger>
+          <TabsTrigger value="team">Team</TabsTrigger>
+        </TabsList>
 
+        <TabsContent value="all-receipt" className="space-y-2">
+          <AllReceiptDownload />
+        </TabsContent>
 
         <TabsContent value="receipt" className="space-y-2">
-         <ReceiptDownload/>
+          <ReceiptDownload />
         </TabsContent>
 
         <TabsContent value="donor" className="space-y-2">
-         <DonorDownload/>
+          <DonorDownload />
         </TabsContent>
 
         <TabsContent value="school" className="space-y-2">
-    <SchoolDownload/>
+          <SchoolDownload />
         </TabsContent>
 
         <TabsContent value="ots" className="space-y-2">
-      <OtsDownload/>
+          <OtsDownload />
         </TabsContent>
 
         <TabsContent value="team" className="space-y-2">
-        <TeamDownload/>
-        </TabsContent>
-
-        <TabsContent value="all-receipt" className="space-y-2">
-       <AllReceiptDownload/>
+          <TeamDownload />
         </TabsContent>
       </Tabs>
     </div>
