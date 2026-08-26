@@ -135,7 +135,11 @@ const ReceiptOldDraft = ({
                   <td className="p-1 border-t border-black">:</td>
                   <td className="border-r border-t border-black p-1">
                     <span className="font-bold">
-                      {formData.receipt_donation_type}
+                      
+                      {(formData.receipt_csr === "Yes" && formData.receipt_donation_type === "One Teacher School") ?
+                   ( <>{formData.receipt_donation_type} - CSR </>)
+                  : 
+                      (<>{formData.receipt_donation_type}</>)}
                     </span>
                   </td>
                 </tr>

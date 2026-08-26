@@ -45,8 +45,8 @@ import ReceiptDraft from "./receipt-draft";
 import BASE_URL from "@/config/base-url";
 
 const exemptionOptions = [
-  { value: "80G", label: "80G" },
-  { value: "Non 80G", label: "Non 80G" },
+  { value: "80G", label: "133" },
+  { value: "Non 80G", label: "Non 133" },
   { value: "FCRA", label: "FCRA" },
 ];
 
