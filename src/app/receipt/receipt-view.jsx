@@ -1134,7 +1134,7 @@ const ReceiptOne = () => {
                         {moment(receipts.receipt_date).format("DD-MM-YYYY")} for
                         the said amount{" "}
                         {receipts.receipt_exemption_type === "80G"
-                          ? " together with a certificate U/sec. 80(G) of the I.T.Act. 1961."
+                          ? ` together with a certificate ${receipt80gCode.receipt_80g_code_short}`
                           : "."}
                       </p>
                     </div>
@@ -1424,7 +1424,7 @@ const ReceiptOne = () => {
                         {moment(receipts.receipt_date).format("DD-MM-YYYY")} for
                         the said amount
                         {receipts.receipt_exemption_type === "80G"
-                          ? " together with a certificate U/sec. 80(G) of the I.T.Act. 1961."
+                          ? ` together with a certificate ${receipt80gCode.receipt_80g_code_short}`
                           : "."}
                       </p>
                     </div>
