@@ -84,6 +84,7 @@ const ReceiptSuperView = ({ id, isDialog = false, onClose }) => {
   const chapter = receiptData?.chapter;
   const authsign = receiptData?.auth_sign;
   const country = receiptData?.country;
+  const receipt80gCode = receiptData?.receipt80GCode || {};
   const amountInWords = numWords(receipts?.receipt_total_amount);
   useEffect(() => {
     refetch();
@@ -279,7 +280,10 @@ const ReceiptSuperView = ({ id, isDialog = false, onClose }) => {
                         <td className="p-1 border-t border-black">:</td>
                         <td className="border-r border-t border-black p-1">
                           <span className="font-bold">
-                            {receipts.receipt_donation_type}
+                            {(receipts.receipt_csr === "Yes" && receipts.receipt_donation_type === "One Teacher School") ?
+                   ( <>{receipts.receipt_donation_type} - CSR </>)
+                  : 
+                      (<>{receipts.receipt_donation_type}</>)}
                           </span>
                         </td>
                       </tr>
@@ -362,10 +366,7 @@ const ReceiptSuperView = ({ id, isDialog = false, onClose }) => {
                             <div className="text-[12px]">
                               {receipts.receipt_date > "2021-05-27" ? (
                                 <>
-                                  Donation is exempt U/Sec.80G of the
-                                  <br />
-                                  Income Tax Act 1961 vide Order No.
-                                  AAAAF0290LF20214 Dt. 28-05-2021.
+                                  {receipt80gCode.receipt_80g_code}
                                 </>
                               ) : (
                                 <>
