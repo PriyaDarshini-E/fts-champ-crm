@@ -274,17 +274,8 @@ const EventList = () => {
 
   return (
     <div className="max-w-full">
-      {usertype != 5 ? (
-        <div class="flex items-center justify-center ">
-          <center>
-            <h1 class="text-4xl font-bold text-gray-800">
-              <span class="text-blue-600">Coming</span>
-              <span class="text-gray-500 ml-2">Soon</span>
-            </h1>
-          </center>
-        </div>
-      ) : (
-        <>
+      
+        
           <div className="flex items-center justify-between py-1">
             <div className="relative w-72">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
@@ -409,8 +400,8 @@ const EventList = () => {
               </Button>
             </div>
           </div>
-        </>
-      )}
+        
+      
     </div>
   );
 };
