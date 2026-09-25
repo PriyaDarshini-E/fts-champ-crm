@@ -79,14 +79,14 @@ const EventEdit = () => {
       const response = await axios.get(`${BASE_URL}/api/event/${id}`, {
         headers: { Authorization: `Bearer ${Cookies.get("token")}` },
       });
-      return response.data.data || null;
+      return response.data.data || response.data?.event || response.data || null;
     },
     enabled: !!id,
   });
 
   const updateEventForOptions = (eventType) => {
     const selectedEventType = eventTypeOptions.find(
-      (type) => type.value === eventType,
+      (type) => type.value.toLowerCase().replace(/_/g, " ").trim() === (eventType || "").toString().toLowerCase().replace(/_/g, " ").trim(),
     );
     if (selectedEventType) {
       setEventForOptions(selectedEventType.eventForOptions);
@@ -97,6 +97,32 @@ const EventEdit = () => {
 
   useEffect(() => {
     if (eventData) {
+      const eventType = eventData.event_type || "";
+      const rawEventFor = eventData.event_for || eventData.event_category || eventData.category || "";
+
+      const selectedEventType = eventTypeOptions.find(
+        (type) => type.value.toLowerCase().replace(/_/g, " ").trim() === eventType.toString().toLowerCase().replace(/_/g, " ").trim()
+      );
+
+      let options = selectedEventType
+        ? [...selectedEventType.eventForOptions]
+        : [];
+
+      let matchedCategory = rawEventFor;
+      if (rawEventFor) {
+        const found = options.find(
+          (opt) => opt.value.toLowerCase().replace(/_/g, " ").trim() === rawEventFor.toString().toLowerCase().replace(/_/g, " ").trim()
+        );
+        if (found) {
+          matchedCategory = found.value;
+        } else {
+          options.push({ value: rawEventFor, label: rawEventFor });
+          matchedCategory = rawEventFor;
+        }
+      }
+
+      setEventForOptions(options);
+
       const formattedData = {
         event_name: eventData.event_name || "",
         event_description: eventData.event_description || "",
@@ -104,15 +130,14 @@ const EventEdit = () => {
           ? eventData.event_date.split("T")[0]
           : "",
         event_time: eventData.event_time || "",
-        event_type: eventData.event_type || "",
-        event_for: eventData.event_for || "",
+        event_type: selectedEventType ? selectedEventType.value : eventType,
+        event_for: matchedCategory,
         event_image: null,
         event_status:
-          eventData.event_status === "active" ? "Active" : "Inactive",
+          eventData.event_status === "Active" || eventData.event_status === "active" ? "Active" : "Inactive",
       };
 
       setFormData(formattedData);
-      updateEventForOptions(eventData.event_type);
 
       if (eventData.event_image) {
         setExistingImage(`${BASE_URL}/storage/${eventData.event_image}`);
@@ -294,7 +319,7 @@ const EventEdit = () => {
       event_time: formData.event_time,
       event_type: formData.event_type,
       event_for: formData.event_for,
-      event_status: formData.event_status.toLowerCase(),
+      event_status: formData.event_status,
       event_image: formData.event_image,
     };
 
@@ -457,11 +482,7 @@ const EventEdit = () => {
                   <SelectTrigger
                     className={errors.event_type ? "border-red-500" : ""}
                   >
-                    <SelectValue placeholder="Select event type">
-                      {eventTypeOptions.find(
-                        (type) => type.value === formData.event_type,
-                      )?.label || "Select event type"}
-                    </SelectValue>
+                    <SelectValue placeholder="Select event type" />
                   </SelectTrigger>
                   <SelectContent>
                     {eventTypeOptions.map((type) => (
@@ -486,6 +507,7 @@ const EventEdit = () => {
                   value={formData.event_for}
                   onValueChange={(value) =>
                     handleInputChange("event_for", value)
+                
                   }
                   disabled={!formData.event_type}
                   required
@@ -499,14 +521,7 @@ const EventEdit = () => {
                           ? "Select category"
                           : "Select event type first"
                       }
-                    >
-                      {eventForOptions.find(
-                        (option) => option.value === formData.event_for,
-                      )?.label ||
-                        (formData.event_type
-                          ? "Select category"
-                          : "Select event type first")}
-                    </SelectValue>
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     {eventForOptions.map((option) => (

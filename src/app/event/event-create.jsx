@@ -359,9 +359,7 @@ const EventCreate = () => {
                   required
                 >
                   <SelectTrigger className={errors.event_type ? 'border-red-500' : ''}>
-                    <SelectValue placeholder="Select event type">
-                      {eventTypeOptions.find(type => type.value === formData.event_type)?.label || "Select event type"}
-                    </SelectValue>
+                    <SelectValue placeholder="Select event type" />
                   </SelectTrigger>
                   <SelectContent>
                     {eventTypeOptions.map((type) => (
@@ -376,7 +374,7 @@ const EventCreate = () => {
                 )}
               </div>
 
-         
+          
               <div className="">
                 <Label htmlFor="event_for" className="text-xs font-medium">
                   Event Category <span className="text-red-500">*</span>
@@ -388,10 +386,7 @@ const EventCreate = () => {
                   required
                 >
                   <SelectTrigger className={errors.event_for ? 'border-red-500' : ''}>
-                    <SelectValue placeholder={formData.event_type ? "Select category" : "Select event type first"}>
-                      {eventForOptions.find(option => option.value === formData.event_for)?.label || 
-                       (formData.event_type ? "Select category" : "Select event type first")}
-                    </SelectValue>
+                    <SelectValue placeholder={formData.event_type ? "Select category" : "Select event type first"} />
                   </SelectTrigger>
                   <SelectContent>
                     {eventForOptions.map((option) => (
