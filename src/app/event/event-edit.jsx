@@ -163,14 +163,6 @@ const EventEdit = () => {
 
     if (!formData.event_date) {
       newErrors.event_date = "Event date is required";
-    } else {
-      const selectedDate = new Date(formData.event_date);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      if (selectedDate < today) {
-        newErrors.event_date = "Event date cannot be in the past";
-      }
     }
 
     if (!formData.event_time) {
@@ -298,10 +290,6 @@ const EventEdit = () => {
     if (fileInput) {
       fileInput.value = "";
     }
-  };
-
-  const getTodayDate = () => {
-    return new Date().toISOString().split("T")[0];
   };
 
   const handleSubmit = (e) => {
@@ -438,7 +426,6 @@ const EventEdit = () => {
                   onChange={(e) =>
                     handleInputChange("event_date", e.target.value)
                   }
-                  min={getTodayDate()}
                   className={errors.event_date ? "border-red-500" : ""}
                   required
                 />

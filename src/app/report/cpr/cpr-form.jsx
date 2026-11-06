@@ -20,6 +20,7 @@ import toast, { Toaster } from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
 import CPRPrintReport from "./cpr-print-report";
 import { fetchFinancialYearsFromApi } from "@/utils/financial-year";
+import { MASTER_ANCHAL_LIST } from "@/utils/anchal";
 
 const FINANCIAL_MONTHS = [
   "April",
@@ -103,16 +104,19 @@ const cleanVal = (val) => {
 // Helper to extract clean label from anchal item
 const getAnchalLabel = (item, idx = 0) => {
   if (!item) return "";
-  if (typeof item === "string") return item;
-  return (
+  if (typeof item === "string") return item.trim();
+  const val =
+    item.achal ||
     item.anchal_name ||
-    item.name ||
     item.anchal ||
+    item.achal_name ||
+    item.name ||
     item.title ||
     item.label ||
-    item.anchal_master_name ||
-    `Anchal ${idx + 1}`
-  );
+    item.anchal_master_name;
+  if (val && typeof val === "string") return val.trim();
+  if (val) return String(val);
+  return idx !== undefined && idx !== null ? `Anchal ${idx + 1}` : "";
 };
 
 const CPRForm = ({
@@ -203,6 +207,11 @@ const CPRForm = ({
     String(csrStatus || "") === "1";
 
   const isView = Boolean(initialIsView || isSubmittedReport);
+
+  // Manual fields are editable when status is Draft (not submitted/completed).
+  // Auto-filled fields (membership, OTS, donations, banks, etc.) remain locked
+  // by their own dbAutoFilled flags regardless.
+  const isManualFieldDisabled = isSubmittedReport;
 
   useEffect(() => {
     if (initialMonth && availableMonths.includes(initialMonth)) {
@@ -431,7 +440,7 @@ const CPRForm = ({
   // Section J: Annexure 1 - Disbursement to Anchal - cleared
   const [anchals, setAnchals] = useState([]);
   const [showAnchalModal, setShowAnchalModal] = useState(false);
-  const [anchalOptions, setAnchalOptions] = useState([]);
+  const [anchalOptions, setAnchalOptions] = useState(MASTER_ANCHAL_LIST);
   const [loadingAnchals, setLoadingAnchals] = useState(false);
   const [newAnchal, setNewAnchal] = useState({
     name: "",
@@ -447,38 +456,53 @@ const CPRForm = ({
       setLoadingAnchals(true);
       const token = Cookies.get("token");
       const targetYear = year || financialYear;
-      let raw = null;
+
+      const parseList = (raw) => {
+        let list = [];
+        if (Array.isArray(raw)) list = raw;
+        else if (Array.isArray(raw?.data)) list = raw.data;
+        else if (Array.isArray(raw?.anchal)) list = raw.anchal;
+        else if (Array.isArray(raw?.anchals)) list = raw.anchals;
+        else if (Array.isArray(raw?.data?.anchal)) list = raw.data.anchal;
+        else if (Array.isArray(raw?.data?.anchals)) list = raw.data.anchals;
+        else if (Array.isArray(raw?.anchal_list)) list = raw.anchal_list;
+        else if (Array.isArray(raw?.data?.anchal_list)) list = raw.data.anchal_list;
+        else if (Array.isArray(raw?.result)) list = raw.result;
+        else if (Array.isArray(raw?.data?.result)) list = raw.data.result;
+        else if (raw?.data && typeof raw.data === "object") {
+          list = Object.values(raw.data).filter(Boolean);
+        }
+        return list;
+      };
+
+      // Single API call to POST /api/getAnchal
+      let list = [];
       try {
-        const payload = { financial_year: targetYear };
-        const res = await axios.post(`${BASE_URL}/api/getAnchal`, payload, {
-          params: { financial_year: targetYear },
+        const payload = targetYear ? { financial_year: targetYear } : {};
+        const config = {
+          timeout: 5000,
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
-        });
-        raw = res.data;
-      } catch (err) {
-        const fd = new FormData();
-        fd.append("financial_year", targetYear);
-        const res2 = await axios.post(`${BASE_URL}/api/getAnchal`, fd, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        raw = res2.data;
+          params: targetYear ? { financial_year: targetYear } : {},
+        };
+        const res = await axios.post(`${BASE_URL}/api/getAnchal`, payload, config);
+        list = parseList(res.data);
+      } catch (callErr) {
+        console.warn("POST /api/getAnchal error in CPRForm:", callErr);
       }
-      let list = [];
-      if (Array.isArray(raw)) list = raw;
-      else if (Array.isArray(raw?.data)) list = raw.data;
-      else if (Array.isArray(raw?.anchal)) list = raw.anchal;
-      else if (Array.isArray(raw?.anchals)) list = raw.anchals;
-      else if (Array.isArray(raw?.data?.anchal)) list = raw.data.anchal;
-      else if (Array.isArray(raw?.data?.anchals)) list = raw.data.anchals;
-      else if (Array.isArray(raw?.anchal_list)) list = raw.anchal_list;
-      else if (Array.isArray(raw?.data?.anchal_list)) list = raw.data.anchal_list;
-      else if (raw?.data && typeof raw.data === "object") list = Object.values(raw.data).filter(Boolean);
+
+      // If backend database has records (e.g. ftschamp.com), use them.
+      // If backend database is empty (e.g. agstest.in test server), use MASTER_ANCHAL_LIST.
+      if (!list || list.length === 0) {
+        list = MASTER_ANCHAL_LIST;
+      }
+
       setAnchalOptions(list);
     } catch (err) {
       console.error("Error fetching getAnchal in CPRForm:", err);
+      setAnchalOptions((prev) => (prev && prev.length > 0 ? prev : MASTER_ANCHAL_LIST));
     } finally {
       setLoadingAnchals(false);
     }
@@ -905,7 +929,7 @@ const CPRForm = ({
         disbList.map((d, i) => ({
           id: d.id || i + 1,
           isFromDb: true,
-          name: d.anchal_name || d.name || "",
+          name: d.anchal_name || d.achal || d.name || "",
           fundingAnchal: d.funding_anchal || "",
           acharyasCount: d.no_of_acharyas || d.acharyasCount || "",
           acharyasPaid: d.no_of_acharyas_paid || "",
@@ -1787,6 +1811,7 @@ const CPRForm = ({
               </div>
             )}
 
+
             {/* Header Fields Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
               {/* Financial Year */}
@@ -1857,8 +1882,8 @@ const CPRForm = ({
                 <input
                   type="text"
                   value={cppName}
-                  disabled={Boolean(dbAutoFilled.header && cppName) || isView}
-                  readOnly={Boolean(dbAutoFilled.header && cppName) || isView}
+                  disabled={Boolean(dbAutoFilled.header && cppName) || isManualFieldDisabled}
+                  readOnly={Boolean(dbAutoFilled.header && cppName) || isManualFieldDisabled}
                   onChange={(e) => setCppName(e.target.value)}
                   className="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed disabled:pointer-events-none"
                   placeholder="Enter CPP name"
@@ -1873,8 +1898,8 @@ const CPRForm = ({
                 <input
                   type="date"
                   value={submissionDate}
-                  disabled={Boolean(dbAutoFilled.header && submissionDate) || isView}
-                  readOnly={Boolean(dbAutoFilled.header && submissionDate) || isView}
+                  disabled={Boolean(dbAutoFilled.header && submissionDate) || isManualFieldDisabled}
+                  readOnly={Boolean(dbAutoFilled.header && submissionDate) || isManualFieldDisabled}
                   max={new Date().toISOString().split("T")[0]}
                   onChange={(e) => setSubmissionDate(e.target.value)}
                   className="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed disabled:pointer-events-none"
@@ -2683,8 +2708,8 @@ const CPRForm = ({
                         <input
                           type="number"
                           value={collectionBoxes?.boxesThisMonth ?? ""}
-                          disabled={Boolean(dbAutoFilled.boxes) || isView}
-                          readOnly={Boolean(dbAutoFilled.boxes) || isView}
+                          disabled={isManualFieldDisabled}
+                          readOnly={isManualFieldDisabled}
                           onChange={(e) =>
                             setCollectionBoxes({
                               ...collectionBoxes,
@@ -2709,8 +2734,8 @@ const CPRForm = ({
                         <input
                           type="number"
                           value={collectionBoxes?.amountThisMonth ?? ""}
-                          disabled={Boolean(dbAutoFilled.boxes) || isView}
-                          readOnly={Boolean(dbAutoFilled.boxes) || isView}
+                          disabled={isManualFieldDisabled}
+                          readOnly={isManualFieldDisabled}
                           onChange={(e) =>
                             setCollectionBoxes({
                               ...collectionBoxes,
@@ -2758,8 +2783,8 @@ const CPRForm = ({
                   <input
                     type="number"
                     value={investments?.fd ?? ""}
-                    disabled={Boolean(dbAutoFilled.investments) || isView}
-                    readOnly={Boolean(dbAutoFilled.investments) || isView}
+                    disabled={isManualFieldDisabled}
+                    readOnly={isManualFieldDisabled}
                     onChange={(e) =>
                       setInvestments({ ...investments, fd: e.target.value })
                     }
@@ -2773,8 +2798,8 @@ const CPRForm = ({
                   <input
                     type="number"
                     value={investments?.mutualFund ?? ""}
-                    disabled={Boolean(dbAutoFilled.investments) || isView}
-                    readOnly={Boolean(dbAutoFilled.investments) || isView}
+                    disabled={isManualFieldDisabled}
+                    readOnly={isManualFieldDisabled}
                     onChange={(e) =>
                       setInvestments({ ...investments, mutualFund: e.target.value })
                     }
@@ -2788,8 +2813,8 @@ const CPRForm = ({
                   <input
                     type="number"
                     value={investments?.others ?? ""}
-                    disabled={Boolean(dbAutoFilled.investments) || isView}
-                    readOnly={Boolean(dbAutoFilled.investments) || isView}
+                    disabled={isManualFieldDisabled}
+                    readOnly={isManualFieldDisabled}
                     onChange={(e) =>
                       setInvestments({ ...investments, others: e.target.value })
                     }
@@ -2803,8 +2828,8 @@ const CPRForm = ({
                   <input
                     type="text"
                     value={investments?.othersSpecify ?? ""}
-                    disabled={Boolean(dbAutoFilled.investments) || isView}
-                    readOnly={Boolean(dbAutoFilled.investments) || isView}
+                    disabled={isManualFieldDisabled}
+                    readOnly={isManualFieldDisabled}
                     onChange={(e) =>
                       setInvestments({ ...investments, othersSpecify: e.target.value })
                     }
@@ -2848,8 +2873,8 @@ const CPRForm = ({
                   type="number"
                   step="0.01"
                   value={cashInHand ?? ""}
-                  disabled={Boolean(dbAutoFilled.cashInHand) || isView}
-                  readOnly={Boolean(dbAutoFilled.cashInHand) || isView}
+                  disabled={isManualFieldDisabled}
+                  readOnly={isManualFieldDisabled}
                   onChange={(e) => setCashInHand(e.target.value)}
                   className="max-w-xs w-full text-right px-2.5 py-1.5 border border-slate-300 rounded bg-white text-xs font-medium focus:ring-1 focus:ring-sky-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed disabled:pointer-events-none"
                 />
@@ -3420,7 +3445,7 @@ const CPRForm = ({
                 <div className="inline-flex rounded-md shadow-xs" role="group">
                   <button
                     type="button"
-                    disabled={Boolean(dbAutoFilled.samagri) || isView}
+                    disabled={isManualFieldDisabled}
                     onClick={() => setSamagriReached("Yes")}
                     className={`px-3 py-1.5 text-xs font-semibold rounded-l-md border ${
                       samagriReached === "Yes"
@@ -3432,7 +3457,7 @@ const CPRForm = ({
                   </button>
                   <button
                     type="button"
-                    disabled={Boolean(dbAutoFilled.samagri) || isView}
+                    disabled={isManualFieldDisabled}
                     onClick={() => setSamagriReached("No")}
                     className={`px-3 py-1.5 text-xs font-semibold rounded-r-md border-t border-b border-r ${
                       samagriReached === "No"
@@ -3446,8 +3471,8 @@ const CPRForm = ({
                 <input
                   type="text"
                   value={samagriRemarks ?? ""}
-                  disabled={Boolean(dbAutoFilled.samagri) || isView}
-                  readOnly={Boolean(dbAutoFilled.samagri) || isView}
+                  disabled={isManualFieldDisabled}
+                  readOnly={isManualFieldDisabled}
                   onChange={(e) => setSamagriRemarks(e.target.value)}
                   placeholder="Reason / Remarks"
                   className="flex-1 min-w-[200px] px-3 py-1.5 border border-slate-300 rounded text-xs bg-white focus:outline-none disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed disabled:pointer-events-none"
@@ -3489,8 +3514,8 @@ const CPRForm = ({
                           <input
                             type="number"
                             value={donorBoard?.nonCsr?.total ?? ""}
-                            disabled={Boolean(dbAutoFilled.donorBoards) || isView}
-                            readOnly={Boolean(dbAutoFilled.donorBoards) || isView}
+                            disabled={isManualFieldDisabled}
+                            readOnly={isManualFieldDisabled}
                             onChange={(e) =>
                               setDonorBoard({
                                 ...donorBoard,
@@ -3504,8 +3529,8 @@ const CPRForm = ({
                           <input
                             type="number"
                             value={donorBoard?.nonCsr?.sent ?? ""}
-                            disabled={Boolean(dbAutoFilled.donorBoards) || isView}
-                            readOnly={Boolean(dbAutoFilled.donorBoards) || isView}
+                            disabled={isManualFieldDisabled}
+                            readOnly={isManualFieldDisabled}
                             onChange={(e) =>
                               setDonorBoard({
                                 ...donorBoard,
@@ -3530,8 +3555,8 @@ const CPRForm = ({
                           <input
                             type="text"
                             value={donorBoard?.nonCsr?.remarks ?? ""}
-                            disabled={Boolean(dbAutoFilled.donorBoards) || isView}
-                            readOnly={Boolean(dbAutoFilled.donorBoards) || isView}
+                            disabled={isManualFieldDisabled}
+                            readOnly={isManualFieldDisabled}
                             onChange={(e) =>
                               setDonorBoard({
                                 ...donorBoard,
@@ -3551,8 +3576,8 @@ const CPRForm = ({
                           <input
                             type="number"
                             value={donorBoard?.csr?.total ?? ""}
-                            disabled={Boolean(dbAutoFilled.donorBoards) || isView}
-                            readOnly={Boolean(dbAutoFilled.donorBoards) || isView}
+                            disabled={isManualFieldDisabled}
+                            readOnly={isManualFieldDisabled}
                             onChange={(e) =>
                               setDonorBoard({
                                 ...donorBoard,
@@ -3566,8 +3591,8 @@ const CPRForm = ({
                           <input
                             type="number"
                             value={donorBoard?.csr?.sent ?? ""}
-                            disabled={Boolean(dbAutoFilled.donorBoards) || isView}
-                            readOnly={Boolean(dbAutoFilled.donorBoards) || isView}
+                            disabled={isManualFieldDisabled}
+                            readOnly={isManualFieldDisabled}
                             onChange={(e) =>
                               setDonorBoard({
                                 ...donorBoard,
@@ -3592,8 +3617,8 @@ const CPRForm = ({
                           <input
                             type="text"
                             value={donorBoard?.csr?.remarks ?? ""}
-                            disabled={Boolean(dbAutoFilled.donorBoards) || isView}
-                            readOnly={Boolean(dbAutoFilled.donorBoards) || isView}
+                            disabled={isManualFieldDisabled}
+                            readOnly={isManualFieldDisabled}
                             onChange={(e) =>
                               setDonorBoard({
                                 ...donorBoard,
@@ -3617,7 +3642,7 @@ const CPRForm = ({
                 <div className="inline-flex rounded-md shadow-xs" role="group">
                   <button
                     type="button"
-                    disabled={Boolean(dbAutoFilled.schoolProgress) || isView}
+                    disabled={isManualFieldDisabled}
                     onClick={() => setSchoolProgressSent("Yes")}
                     className={`px-3 py-1.5 text-xs font-semibold rounded-l-md border ${
                       schoolProgressSent === "Yes"
@@ -3629,7 +3654,7 @@ const CPRForm = ({
                   </button>
                   <button
                     type="button"
-                    disabled={Boolean(dbAutoFilled.schoolProgress) || isView}
+                    disabled={isManualFieldDisabled}
                     onClick={() => setSchoolProgressSent("No")}
                     className={`px-3 py-1.5 text-xs font-semibold rounded-r-md border-t border-b border-r ${
                       schoolProgressSent === "No"
@@ -3643,8 +3668,8 @@ const CPRForm = ({
                 <input
                   type="text"
                   value={progressRemarks ?? ""}
-                  disabled={Boolean(dbAutoFilled.schoolProgress) || isView}
-                  readOnly={Boolean(dbAutoFilled.schoolProgress) || isView}
+                  disabled={isManualFieldDisabled}
+                  readOnly={isManualFieldDisabled}
                   onChange={(e) => setProgressRemarks(e.target.value)}
                   placeholder="Reason / Remarks"
                   className="flex-1 min-w-[200px] px-3 py-1.5 border border-slate-300 rounded text-xs bg-white focus:outline-none disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed disabled:pointer-events-none"
@@ -3659,7 +3684,7 @@ const CPRForm = ({
                 <div className="relative max-w-sm">
                   <select
                     value={selectedMonitoringAnchal}
-                    disabled={isView}
+                    disabled={isManualFieldDisabled}
                     onChange={(e) => setSelectedMonitoringAnchal(e.target.value)}
                     className="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-xs focus:ring-1 focus:ring-slate-500 appearance-none font-medium disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed"
                   >
@@ -3686,7 +3711,7 @@ const CPRForm = ({
                   <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-2.5 pointer-events-none" />
                 </div>
 
-                {!isView && (
+                {!isManualFieldDisabled && (
                   <button
                     type="button"
                     onClick={() => {
@@ -3716,7 +3741,7 @@ const CPRForm = ({
                         className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-slate-200 text-xs font-medium text-slate-800"
                       >
                         {item}
-                        {!isView && (
+                        {!isManualFieldDisabled && (
                           <button
                             type="button"
                             onClick={() =>
@@ -3803,7 +3828,7 @@ const CPRForm = ({
                 </span>
                 <div className="flex-1">
                   <h3 className="text-xs font-bold text-slate-900">Upload the signed CPR</h3>
-                  {!isView ? (
+                  {!isManualFieldDisabled ? (
                     <>
                       <div className="mt-2 flex flex-wrap items-center gap-3">
                         <input
@@ -4383,7 +4408,10 @@ const CPRForm = ({
                       const matched = anchalOptions.find(
                         (a, idx) =>
                           getAnchalLabel(a, idx) === val ||
-                          String(a?.id) === val
+                          String(a?.id) === val ||
+                          a?.achal === val ||
+                          a?.anchal_name === val ||
+                          a?.anchal === val
                       );
                       const matchedName = matched ? getAnchalLabel(matched) : val;
                       setNewAnchal({
@@ -4404,11 +4432,7 @@ const CPRForm = ({
                     className="w-full border border-slate-300 rounded px-3 py-2 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-[#0e7490] appearance-none pr-8 font-medium"
                     required
                   >
-                    <option value="">
-                      {loadingAnchals
-                        ? "Loading Anchals..."
-                        : "-- Select Anchal --"}
-                    </option>
+                    <option value="">-- Select Anchal --</option>
                     {anchalOptions.map((a, aIdx) => {
                       const aName = getAnchalLabel(a, aIdx);
                       return (
