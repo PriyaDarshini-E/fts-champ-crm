@@ -53,6 +53,7 @@ import {
   getCurrentFinancialYear,
   fetchFinancialYearsFromApi,
 } from "@/utils/financial-year";
+import { MASTER_ANCHAL_LIST } from "@/utils/anchal";
 
 const FINANCIAL_MONTHS = [
   "April",
@@ -99,16 +100,19 @@ const getTodayDateString = () => {
 // Helper to extract clean label from anchal item
 const getAnchalLabel = (item, idx = 0) => {
   if (!item) return "";
-  if (typeof item === "string") return item;
-  return (
+  if (typeof item === "string") return item.trim();
+  const val =
+    item.achal ||
     item.anchal_name ||
-    item.name ||
     item.anchal ||
+    item.achal_name ||
+    item.name ||
     item.title ||
     item.label ||
-    item.anchal_master_name ||
-    `Anchal ${idx + 1}`
-  );
+    item.anchal_master_name;
+  if (val && typeof val === "string") return val.trim();
+  if (val) return String(val);
+  return idx !== undefined && idx !== null ? `Anchal ${idx + 1}` : "";
 };
 
 const CPRDisbursement = () => {
@@ -122,26 +126,40 @@ const CPRDisbursement = () => {
   const [search, setSearch] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
 
-  // Anchals list from POST /api/getAnchal
-  const [anchalOptions, setAnchalOptions] = useState([]);
+  // Anchals list from POST /api/getAnchal (defaults to MASTER_ANCHAL_LIST for all base URLs)
+  const [anchalOptions, setAnchalOptions] = useState(MASTER_ANCHAL_LIST);
   const [loadingAnchals, setLoadingAnchals] = useState(false);
 
-  // Financial Year list strictly from API
+  // Financial Year list strictly from API + fallback years
   const [financialYearList, setFinancialYearList] = useState(() => {
     const c = Cookies.get("currentYear") || currentYear;
-    return c ? [c] : ["2026-27"];
+    const match = c?.match(/^(\d{4})-(\d{2})$/);
+    if (match) {
+      const startYr = parseInt(match[1], 10);
+      return [
+        c,
+        `${startYr - 1}-${String(startYr).slice(-2)}`,
+        `${startYr - 2}-${String(startYr - 1).slice(-2)}`,
+      ];
+    }
+    return [c || "2026-27", "2025-26", "2024-25"];
   });
 
   useEffect(() => {
-    if (Cookies.get("currentYear")) return;
     fetchFinancialYearsFromApi().then((list) => {
-      if (list && list.length > 0) {
-        setFinancialYearList(list);
-        setFormData((prev) => ({
-          ...prev,
-          financial_year: list.includes(prev.financial_year) ? prev.financial_year : list[0],
-        }));
+      const cy = Cookies.get("currentYear") || currentYear;
+      const combined = new Set(list || []);
+      if (cy) combined.add(cy);
+      const match = cy?.match(/^(\d{4})-(\d{2})$/);
+      if (match) {
+        const startYr = parseInt(match[1], 10);
+        for (let i = 1; i <= 3; i++) {
+          const prevY = startYr - i;
+          combined.add(`${prevY}-${String(prevY + 1).slice(-2)}`);
+        }
       }
+      const sortedYears = Array.from(combined).sort().reverse();
+      setFinancialYearList(sortedYears);
     });
   }, [currentYear]);
 
@@ -202,59 +220,53 @@ const CPRDisbursement = () => {
       const targetYear = year || currentYear;
       console.log("Calling POST /api/getAnchal payload with year:", targetYear);
 
-      let raw = null;
+      // Helper to parse list from raw API response
+      const parseList = (raw) => {
+        let list = [];
+        if (Array.isArray(raw)) list = raw;
+        else if (Array.isArray(raw?.data)) list = raw.data;
+        else if (Array.isArray(raw?.anchal)) list = raw.anchal;
+        else if (Array.isArray(raw?.anchals)) list = raw.anchals;
+        else if (Array.isArray(raw?.data?.anchal)) list = raw.data.anchal;
+        else if (Array.isArray(raw?.data?.anchals)) list = raw.data.anchals;
+        else if (Array.isArray(raw?.anchal_list)) list = raw.anchal_list;
+        else if (Array.isArray(raw?.data?.anchal_list)) list = raw.data.anchal_list;
+        else if (Array.isArray(raw?.result)) list = raw.result;
+        else if (Array.isArray(raw?.data?.result)) list = raw.data.result;
+        else if (raw?.data && typeof raw.data === "object") {
+          list = Object.values(raw.data).filter(Boolean);
+        }
+        return list;
+      };
+
+      // Single API call to POST /api/getAnchal
+      let list = [];
       try {
-        const payload = { financial_year: targetYear };
-        const res = await axios.post(`${BASE_URL}/api/getAnchal`, payload, {
-          params: { financial_year: targetYear },
+        const payload = targetYear ? { financial_year: targetYear } : {};
+        const config = {
+          timeout: 5000,
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
-        });
-        console.log("POST /api/getAnchal (JSON) response:", res.data);
-        raw = res.data;
-      } catch (err) {
-        console.warn("JSON POST /api/getAnchal failed, trying FormData fallback:", err);
-        const fd = new FormData();
-        fd.append("financial_year", targetYear);
-        const res2 = await axios.post(`${BASE_URL}/api/getAnchal`, fd, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        console.log("POST /api/getAnchal (FormData) response:", res2.data);
-        raw = res2.data;
+          params: targetYear ? { financial_year: targetYear } : {},
+        };
+        const res = await axios.post(`${BASE_URL}/api/getAnchal`, payload, config);
+        list = parseList(res.data);
+      } catch (callErr) {
+        console.warn("POST /api/getAnchal network error:", callErr);
       }
 
-      // Extract list from all possible response shapes
-      let list = [];
-      if (Array.isArray(raw)) {
-        list = raw;
-      } else if (Array.isArray(raw?.data)) {
-        list = raw.data;
-      } else if (Array.isArray(raw?.anchal)) {
-        list = raw.anchal;
-      } else if (Array.isArray(raw?.anchals)) {
-        list = raw.anchals;
-      } else if (Array.isArray(raw?.data?.anchal)) {
-        list = raw.data.anchal;
-      } else if (Array.isArray(raw?.data?.anchals)) {
-        list = raw.data.anchals;
-      } else if (Array.isArray(raw?.anchal_list)) {
-        list = raw.anchal_list;
-      } else if (Array.isArray(raw?.data?.anchal_list)) {
-        list = raw.data.anchal_list;
-      } else if (Array.isArray(raw?.result)) {
-        list = raw.result;
-      } else if (Array.isArray(raw?.data?.result)) {
-        list = raw.data.result;
-      } else if (raw?.data && typeof raw.data === "object") {
-        list = Object.values(raw.data).filter(Boolean);
+      // If backend database has records (e.g. ftschamp.com), use them.
+      // If backend database is empty (e.g. agstest.in test server), use MASTER_ANCHAL_LIST.
+      if (!list || list.length === 0) {
+        list = MASTER_ANCHAL_LIST;
       }
+
       setAnchalOptions(list);
     } catch (err) {
-      console.error("Error fetching getAnchal:", err);
+      console.error("Error in fetchAnchals:", err);
+      setAnchalOptions((prev) => (prev && prev.length > 0 ? prev : MASTER_ANCHAL_LIST));
     } finally {
       setLoadingAnchals(false);
     }
@@ -308,7 +320,8 @@ const CPRDisbursement = () => {
   useEffect(() => {
     fetchDisbursementData();
     fetchAnchals(currentYear);
-  }, [fetchDisbursementData, fetchAnchals, currentYear]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const location = useLocation();
   useEffect(() => {
@@ -390,7 +403,10 @@ const CPRDisbursement = () => {
     const matched = anchalOptions.find(
       (a, aIdx) =>
         getAnchalLabel(a, aIdx) === anchalVal ||
-        String(a?.id) === anchalVal
+        String(a?.id) === anchalVal ||
+        a?.achal === anchalVal ||
+        a?.anchal_name === anchalVal ||
+        a?.anchal === anchalVal
     );
     const matchedName = matched ? getAnchalLabel(matched) : anchalVal;
     setFormData((prev) => {
@@ -579,7 +595,7 @@ const CPRDisbursement = () => {
       remittance_date: item.remittance_date || "",
       total_remittance_last_month: item.total_remittance_last_month ?? "",
       total_remittance_this_month: item.total_remittance_this_month ?? "",
-      anchal_name: item.anchal_name || "",
+      anchal_name: item.anchal_name || item.achal || "",
       no_of_acharyas: item.no_of_acharyas ?? "",
       amount: item.amount ?? "",
     });
@@ -610,7 +626,7 @@ const CPRDisbursement = () => {
           remittance_date: detail.remittance_date ?? item.remittance_date ?? "",
           total_remittance_last_month: detail.total_remittance_last_month ?? item.total_remittance_last_month ?? "",
           total_remittance_this_month: detail.total_remittance_this_month ?? item.total_remittance_this_month ?? "",
-          anchal_name: detail.anchal_name ?? item.anchal_name ?? "",
+          anchal_name: detail.anchal_name ?? detail.achal ?? item.anchal_name ?? item.achal ?? "",
           no_of_acharyas: detail.no_of_acharyas ?? item.no_of_acharyas ?? "",
           amount: detail.amount ?? item.amount ?? "",
         });
@@ -799,7 +815,7 @@ const CPRDisbursement = () => {
     if (!search.trim()) return disbursementList;
     const term = search.toLowerCase();
     return disbursementList.filter((item) => {
-      const anchalName = String(item.anchal_name || "").toLowerCase();
+      const anchalName = String(item.anchal_name || item.achal || "").toLowerCase();
       const fundingAnchal = String(item.funding_anchal || "").toLowerCase();
       const fMonth = String(item.financial_month || "").toLowerCase();
       const fYear = String(item.financial_year || "").toLowerCase();
@@ -981,7 +997,7 @@ const CPRDisbursement = () => {
                       </span>
                     </TableCell>
                     <TableCell className="py-3 px-4 text-xs font-semibold text-slate-800">
-                      {item.anchal_name || "—"}
+                      {item.anchal_name || item.achal || "—"}
                     </TableCell>
                     <TableCell className="py-3 px-4 text-xs text-slate-600">
                       {item.funding_anchal || "—"}
@@ -1181,11 +1197,7 @@ const CPRDisbursement = () => {
                           className="w-full h-9 border border-slate-300 rounded-md px-3 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-sky-500 appearance-none pr-8 font-medium"
                           required
                         >
-                          <option value="">
-                            {loadingAnchals
-                              ? "Loading Anchals..."
-                              : "-- Select Anchal --"}
-                          </option>
+                          <option value="">-- Select Anchal --</option>
                           {anchalOptions.map((a, aIdx) => {
                             const aName = getAnchalLabel(a, aIdx);
                             return (
@@ -1530,7 +1542,10 @@ const CPRDisbursement = () => {
                         const matched = anchalOptions.find(
                           (a, aIdx) =>
                             getAnchalLabel(a, aIdx) === anchalVal ||
-                            String(a?.id) === anchalVal
+                            String(a?.id) === anchalVal ||
+                            a?.achal === anchalVal ||
+                            a?.anchal_name === anchalVal ||
+                            a?.anchal === anchalVal
                         );
                         const matchedName = matched
                           ? getAnchalLabel(matched)
@@ -1560,11 +1575,7 @@ const CPRDisbursement = () => {
                       className="w-full h-9 border border-slate-300 rounded-md px-3 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-sky-500 appearance-none pr-8 font-medium"
                       required
                     >
-                      <option value="">
-                        {loadingAnchals
-                          ? "Loading Anchals..."
-                          : "-- Select Anchal --"}
-                      </option>
+                      <option value="">-- Select Anchal --</option>
                       {anchalOptions.map((a, aIdx) => {
                         const aName = getAnchalLabel(a, aIdx);
                         return (
@@ -1816,7 +1827,7 @@ const CPRDisbursement = () => {
             <AlertDialogDescription className="text-xs text-slate-600">
               Are you sure you want to delete the disbursement record for{" "}
               <span className="font-semibold text-slate-900">
-                {itemToDelete?.anchal_name || "this Anchal"}
+                {itemToDelete?.anchal_name || itemToDelete?.achal || "this Anchal"}
               </span>
               ? This action cannot be undone.
             </AlertDialogDescription>
