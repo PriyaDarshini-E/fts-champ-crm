@@ -97,12 +97,12 @@ const MembershipActive = () => {
   } = useQuery({
     queryKey: ["member-active", debouncedSearchTerm, pagination.pageIndex + 1],
     queryFn: async () => {
-      const params = new URLSearchParams({
-        page: (pagination.pageIndex + 1).toString(),
-      });
+      const params = new URLSearchParams();
 
       if (debouncedSearchTerm) {
         params.append("search", debouncedSearchTerm);
+      } else {
+        params.append("page", (pagination.pageIndex + 1).toString());
       }
 
       const response = await axios.get(
@@ -126,6 +126,7 @@ const MembershipActive = () => {
 
   // Prefetch next and previous pages
   useEffect(() => {
+    if (debouncedSearchTerm) return;
     const currentPage = pagination.pageIndex + 1;
     const totalPages = membershipData?.data?.last_page || 1;
 

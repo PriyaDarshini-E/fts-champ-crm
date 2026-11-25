@@ -161,7 +161,7 @@ const SchoolAlloted = () => {
     prefetchPage,
     refetch,
   } = useGetMutation("schoolallotmentlist", SCHOOL_ALLOT_LIST, {
-    page: pagination.pageIndex + 1,
+    ...(debouncedSearchTerm ? {} : { page: pagination.pageIndex + 1 }),
     ...(debouncedSearchTerm ? { search: debouncedSearchTerm } : {}),
     type: statusFilter, // always send type with the value (All or 1/2/3)
   });
@@ -173,6 +173,7 @@ const SchoolAlloted = () => {
   }, [location.state, refetch]);
 
   useEffect(() => {
+    if (debouncedSearchTerm) return;
     if (!schoolData?.data?.last_page) return;
 
     const currentPage = pagination.pageIndex + 1;

@@ -93,7 +93,7 @@ const DonorDetails = () => {
     `donorschoollist${donorId}`,
     `${SCHOOL_LIST}?year=${donorYear}`,
     {
-      page: pagination.pageIndex + 1,
+      ...(debouncedSearchTerm ? {} : { page: pagination.pageIndex + 1 }),
       ...(debouncedSearchTerm ? { search: debouncedSearchTerm } : {}),
     },
   );
@@ -102,6 +102,7 @@ const DonorDetails = () => {
     refetchchoolallotyeaar();
   }, [donorId, donorYear]);
   useEffect(() => {
+    if (debouncedSearchTerm) return;
     if (!schoolData?.data?.school?.last_page) return;
 
     const currentPage = pagination.pageIndex + 1;

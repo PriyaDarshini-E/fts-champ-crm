@@ -109,7 +109,7 @@ const Wrongallotment = () => {
     prefetchPage,
     refetch,
   } = useGetMutation("wrongAllotedList", WRONG_ALLOTMENT, {
-    page: pagination.pageIndex + 1,
+    ...(debouncedSearchTerm ? {} : { page: pagination.pageIndex + 1 }),
     ...(debouncedSearchTerm ? { search: debouncedSearchTerm } : {}),
   });
   useEffect(() => {
@@ -119,6 +119,7 @@ const Wrongallotment = () => {
   }, [location.state, refetch]);
 
   useEffect(() => {
+    if (debouncedSearchTerm) return;
     if (!wrongAllotedList?.data?.last_page) return;
     const currentPage = pagination.pageIndex + 1;
     const totalPages = wrongAllotedList?.data?.last_page;

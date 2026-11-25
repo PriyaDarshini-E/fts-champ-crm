@@ -70,12 +70,13 @@ const SchoolAllotView = () => {
     `schoolallotlist-${donorId}-${pagination.pageIndex}`,
     `${SCHOOL_ALLOT_VIEW_LIST}?id=${donorId}`,
     {
-      page: pagination.pageIndex + 1,
+      ...(debouncedSearchTerm ? {} : { page: pagination.pageIndex + 1 }),
       ...(debouncedSearchTerm ? { search: debouncedSearchTerm } : {}),
     },
   );
   const keyDown = useNumericInput();
   useEffect(() => {
+    if (debouncedSearchTerm) return;
     if (!schoolsAllotment?.data?.last_page) return;
 
     const currentPage = pagination.pageIndex + 1;

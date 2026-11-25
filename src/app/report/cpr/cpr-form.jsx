@@ -233,7 +233,11 @@ const CPRForm = ({
     String(csrStatus || "").toLowerCase() === "active" ||
     String(csrStatus || "") === "1";
 
+  const [isEditApiTriggered, setIsEditApiTriggered] = useState(false);
+  const [isDraftSaved, setIsDraftSaved] = useState(false);
+
   const isView = Boolean(initialIsView || isSubmittedReport);
+  const isEditMode = Boolean(reportId || isEdit || isEditApiTriggered || isDraftSaved);
 
   // Manual fields are editable when status is Draft (not submitted/completed).
   // Auto-filled fields (membership, OTS, donations, banks, etc.) remain locked
@@ -746,8 +750,8 @@ const CPRForm = ({
         ? data.cpr_details
         : data;
 
-    // Report ID
-    if (cpr.id) {
+    // Report ID - only update if already in edit mode
+    if (cpr.id && (reportId || isEdit || isEditApiTriggered)) {
       setCurrentReportId(cpr.id);
     }
 
@@ -761,24 +765,30 @@ const CPRForm = ({
     }
 
     // Chapter Name & CPP Info
+
     const chName =
       data.chapter_name ||
       cpr.chapter?.chapter_name ||
       cpr.chapter_name ||
       data.chapter?.chapter_name ||
       data.name_of_chapter;
-    if (chName) {
+    if (chName && (!chapterName || !isEditMode)) {
       setChapterName(chName);
     }
 
-    const cpName =
-      data.cpp_name ||
-      cpr.name_of_cpp ||
-      cpr.cpp_name ||
-      data.name_of_cpp ||
-      data.chairman;
-    if (cpName) {
-      setCppName(cpName);
+    // CPP Name:
+    // When creating (!isEditMode), take from getCPRReportDetails API.
+    // When editing (isEditMode), take from GET /api/cpr-report/{id} and do NOT overwrite!
+    if (!isEditMode) {
+      const cpName =
+        data.cpp_name ||
+        cpr.name_of_cpp ||
+        cpr.cpp_name ||
+        data.name_of_cpp ||
+        data.chairman;
+      if (cpName) {
+        setCppName(cpName);
+      }
     }
 
     const subDate = data.submission_date || cpr.submission_date;
@@ -1485,6 +1495,8 @@ const CPRForm = ({
       if (!id) return;
       try {
         setLoadingReport(true);
+        setIsEditApiTriggered(true);
+        setCurrentReportId(id);
         const token = Cookies.get("token");
         console.log(`Triggering GET /api/cpr-report/${id}...`);
         const res = await axios.get(`${BASE_URL}/api/cpr-report/${id}`, {
@@ -1507,7 +1519,13 @@ const CPRForm = ({
             const idx = FINANCIAL_MONTHS.indexOf(report.financial_month);
             if (idx !== -1) setMonthIndex(String(idx + 1));
           }
-          if (report.name_of_cpp) setCppName(report.name_of_cpp);
+          if (report.chapter_name) setChapterName(report.chapter_name);
+          const cpName =
+            report.name_of_cpp ||
+            report.cpp_name ||
+            report.cpr_details?.name_of_cpp ||
+            report.cpr_details?.cpp_name;
+          if (cpName) setCppName(cpName);
           if (report.submission_date) setSubmissionDate(report.submission_date);
 
           // Pre-fill manual fields
@@ -1758,6 +1776,9 @@ const CPRForm = ({
         response.data?.cpr_report_id;
       if (createdId) {
         setCurrentReportId(createdId);
+        setIsDraftSaved(true);
+        setIsEditApiTriggered(true);
+        window.history.replaceState(null, "", `/cpr-report/${createdId}`);
       }
 
       setCsrStatus("Draft");
@@ -2743,7 +2764,7 @@ const CPRForm = ({
                 </label>
                 <select
                   value={financialYear}
-                  disabled={isView}
+                  disabled={isView || isEditMode}
                   onChange={(e) => setFinancialYear(e.target.value)}
                   className="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed"
                 >
@@ -2764,7 +2785,8 @@ const CPRForm = ({
                   type="text"
                   list="cpr-chapter-options"
                   value={chapterName}
-                  disabled={isView}
+                  disabled={isView || isEditMode}
+                  readOnly={isView || isEditMode}
                   onChange={(e) => setChapterName(e.target.value)}
                   className="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed"
                   placeholder="Select or enter Chapter"
@@ -2783,7 +2805,7 @@ const CPRForm = ({
                 </label>
                 <select
                   value={monthName}
-                  disabled={isView}
+                  disabled={isView || isEditMode}
                   onChange={(e) => {
                     const m = e.target.value;
                     setMonthName(m);
@@ -2810,7 +2832,8 @@ const CPRForm = ({
                   type="text"
                   list="cpr-cpp-options"
                   value={cppName}
-                  disabled={isManualFieldDisabled}
+                  disabled={isView || isEditMode || isManualFieldDisabled}
+                  readOnly={isView || isEditMode || isManualFieldDisabled}
                   onChange={(e) => setCppName(e.target.value)}
                   className="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed"
                   placeholder="Select or enter CPP name"
@@ -2832,8 +2855,8 @@ const CPRForm = ({
                 <input
                   type="date"
                   value={submissionDate}
-                  disabled={Boolean(dbAutoFilled.header && submissionDate) || isManualFieldDisabled}
-                  readOnly={Boolean(dbAutoFilled.header && submissionDate) || isManualFieldDisabled}
+                  disabled={isView || isEditMode || isManualFieldDisabled}
+                  readOnly={isView || isEditMode || isManualFieldDisabled}
                   max={new Date().toISOString().split("T")[0]}
                   onChange={(e) => setSubmissionDate(e.target.value)}
                   className="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed disabled:pointer-events-none"

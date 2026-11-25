@@ -85,12 +85,13 @@ const MultipleRecepitList = () => {
     "multiple-recepit-list",
     `${RECEIPT_SUPER_MULTI_RECEIPT_LIST}`,
     {
-      page: pagination.pageIndex + 1,
+      ...(debouncedSearchTerm ? {} : { page: pagination.pageIndex + 1 }),
       ...(debouncedSearchTerm ? { search: debouncedSearchTerm } : {}),
     }
   );
   const receiptData = receiptMultipleData?.data;
   useEffect(() => {
+    if (debouncedSearchTerm) return;
     const currentPage = pagination.pageIndex + 1;
     const totalPages = receiptData?.last_page || 1;
 
