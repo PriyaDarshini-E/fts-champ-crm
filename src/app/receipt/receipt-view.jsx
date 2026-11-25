@@ -659,11 +659,10 @@ const ReceiptOne = () => {
                         {/* Status Badge */}
                         <span
                           className={`absolute -top-2 -right-2 min-w-[20px] h-5 px-1 rounded-full text-[10px] font-semibold flex items-center justify-center border-2 border-white
-              ${
-                showSignature === "Yes"
-                  ? "bg-green-500 text-white"
-                  : "bg-red-500 text-white"
-              }`}
+              ${showSignature === "Yes"
+                              ? "bg-green-500 text-white"
+                              : "bg-red-500 text-white"
+                            }`}
                         >
                           {showSignature}
                         </span>
@@ -717,9 +716,8 @@ const ReceiptOne = () => {
 
               <div className="text-center border-x border-b border-black p-1 h-14">
                 <p className="text-sm font-semibold mx-auto max-w-[90%]">
-                  {`${chapter?.chapter_address || ""}, ${chapter?.chapter_city || ""} - ${
-                    chapter?.chapter_pin || ""
-                  }, ${chapter?.chapter_state || ""} 
+                  {`${chapter?.chapter_address || ""}, ${chapter?.chapter_city || ""} - ${chapter?.chapter_pin || ""
+                    }, ${chapter?.chapter_state || ""} 
                   ${chapter?.chapter_email ? `Email: ${chapter.chapter_email} |` : ""} 
                   ${chapter?.chapter_website ? `${chapter.chapter_website} |` : ""} 
                   ${chapter?.chapter_phone ? `Ph: ${chapter.chapter_phone} |` : ""} 
@@ -766,7 +764,7 @@ const ReceiptOne = () => {
                             (receipts.donor.indicomp_corr_preffer ===
                               "Branch Office" ||
                               receipts.donor.indicomp_corr_preffer ===
-                                "Office") && (
+                              "Office") && (
                               <div>
                                 <p className="text-sm leading-tight">
                                   {receipts.donor.indicomp_off_branch_address}
@@ -789,9 +787,9 @@ const ReceiptOne = () => {
                             (receipts.donor.indicomp_corr_preffer ===
                               "Registered" ||
                               receipts.donor.indicomp_corr_preffer ===
-                                "Residence" ||
+                              "Residence" ||
                               receipts.donor.indicomp_corr_preffer ===
-                                "Digital") && (
+                              "Digital") && (
                               <div>
                                 <p className="text-sm leading-tight">
                                   {receipts.donor.indicomp_res_reg_address}
@@ -828,15 +826,15 @@ const ReceiptOne = () => {
                     <td className="p-1 border-t border-black">:</td>
                     <td className="border-r border-t border-black p-1">
                       <span className="font-bold">
-                        
-                  
-                  {(receipts.receipt_csr === "Yes" && receipts.receipt_donation_type === "One Teacher School") ?
-                   ( <>{receipts.receipt_donation_type} - CSR </>)
-                  : 
-                      (<>{receipts.receipt_donation_type}</>)}
-                      
 
-                         
+
+                        {(receipts.receipt_csr === "Yes" && receipts.receipt_donation_type === "One Teacher School") ?
+                          (<>{receipts.receipt_donation_type} - CSR </>)
+                          :
+                          (<>{receipts.receipt_donation_type}</>)}
+
+
+
                       </span>
                     </td>
                   </tr>
@@ -1029,7 +1027,7 @@ const ReceiptOne = () => {
                         (receipts.donor.indicomp_corr_preffer ===
                           "Branch Office" ||
                           receipts.donor.indicomp_corr_preffer ===
-                            "Office") && (
+                          "Office") && (
                           <div className="space-y-0.5">
                             <p className="font-serif text-sm">
                               {receipts.donor.indicomp_off_branch_address}
@@ -1052,9 +1050,9 @@ const ReceiptOne = () => {
                         (receipts.donor.indicomp_corr_preffer ===
                           "Registered" ||
                           receipts.donor.indicomp_corr_preffer ===
-                            "Residence" ||
+                          "Residence" ||
                           receipts.donor.indicomp_corr_preffer ===
-                            "Digital") && (
+                          "Digital") && (
                           <div className="space-y-0.5">
                             <p className="font-serif text-sm">
                               {receipts.donor.indicomp_res_reg_address}
@@ -1235,9 +1233,8 @@ const ReceiptOne = () => {
                           <div className="text-center p-1">
                             <p className="text-xs font-medium mx-auto max-w-[100%]">
                               {`${chapter.chapter_name}`}{" "}
-                              {`${chapter?.chapter_address || ""}, ${chapter?.chapter_city || ""} - ${
-                                chapter?.chapter_pin || ""
-                              }, ${chapter?.chapter_state || ""} `}
+                              {`${chapter?.chapter_address || ""}, ${chapter?.chapter_city || ""} - ${chapter?.chapter_pin || ""
+                                }, ${chapter?.chapter_state || ""} `}
                               <br />
                               {` ${chapter?.chapter_email ? `Email: ${chapter.chapter_email} |` : ""} 
                        ${chapter?.chapter_website ? `${chapter.chapter_website} |` : ""} 
@@ -1253,16 +1250,46 @@ const ReceiptOne = () => {
                   )}
 
                   {receipts.receipt_donation_type === "Membership" && (
-                    <div className="space-y-1 mt-2">
+                    <div className="space-y-1 mt-6">
                       <p className="font-serif text-sm">With Best regards</p>
                       <p className="font-serif text-sm">Yours sincerely</p>
-                      <p className="font-serif text-sm">
-                        {authsign.map((sig, key) => (
-                          <span key={key}>{sig.indicomp_full_name}</span>
-                        ))}
-                      </p>
-                      <p className="font-serif text-sm">{chapter.auth_sign}</p>
-                      <p className="font-serif text-sm">
+
+                      <div className="relative w-fit min-w-[200px]">
+                        {/* SIGNATURE + NAME OVERLAP AREA */}
+                        <div className="relative mt-2 h-16">
+                          {/* NAME (behind signature) */}
+                          <p className="absolute bottom-0 left-0 z-0 font-serif text-sm whitespace-nowrap">
+                            {authsign.map((sig, key) => (
+                              <span key={key}>{sig.indicomp_full_name}</span>
+                            ))}
+                          </p>
+
+                          {/* SIGNATURE (overlapping name) */}
+                          {showSignature === "Yes" ? (
+                            <>
+                              {receiptData?.chapter?.auth_sign_required ==
+                                "Yes" &&
+                                receiptData?.auth_sign?.[0]
+                                  ?.indicomp_image_sign && (
+                                  <img
+                                    src={`${receiptData?.image_url?.image_url || receiptData?.image_url}${receiptData?.auth_sign?.[0]?.indicomp_image_sign}`}
+                                    alt="Signature"
+                                    className="absolute bottom-2 -left-2 h-20 z-10 px-1"
+                                  />
+                                )}
+                            </>
+                          ) : (
+                            <div className="h-14" /> // Placeholder when no signature
+                          )}
+                        </div>
+
+                        {/* DESIGNATION (always below everything) */}
+                        <p className="font-serif text-sm mt-2">
+                          {chapter?.auth_sign}
+                        </p>
+                      </div>
+
+                      <p className="font-serif text-sm pt-4">
                         Encl: As stated above
                       </p>
                     </div>
@@ -1319,7 +1346,7 @@ const ReceiptOne = () => {
                         (receipts.donor.indicomp_corr_preffer ===
                           "Branch Office" ||
                           receipts.donor.indicomp_corr_preffer ===
-                            "Office") && (
+                          "Office") && (
                           <div>
                             <p className="font-serif text-[18px]">
                               {receipts.donor.indicomp_off_branch_address}
@@ -1342,9 +1369,9 @@ const ReceiptOne = () => {
                         (receipts.donor.indicomp_corr_preffer ===
                           "Registered" ||
                           receipts.donor.indicomp_corr_preffer ===
-                            "Residence" ||
+                          "Residence" ||
                           receipts.donor.indicomp_corr_preffer ===
-                            "Digital") && (
+                          "Digital") && (
                           <div>
                             <p className="font-serif text-[18px]">
                               {receipts.donor.indicomp_res_reg_address}
@@ -1464,7 +1491,7 @@ const ReceiptOne = () => {
 
                   {receipts.receipt_donation_type !== "Membership" && (
                     <div>
-                      <p className="my-3 font-serif text-[18px]">
+                      <p className="my-3 mt-6 font-serif text-[18px]">
                         Thanking you once again
                       </p>
                       <p className="font-serif text-[18px]">
@@ -1474,9 +1501,9 @@ const ReceiptOne = () => {
                         For Friends of Tribals Society
                       </p>
 
-                      <div className="relative h-24">
+                      <div className="relative h-24 min-w-[200px]">
                         {/* NAME (bottom layer) */}
-                        <p className="font-serif text-[18px] absolute bottom-0 left-0 z-0">
+                        <p className="font-serif text-[18px] absolute bottom-0 left-0 z-0 whitespace-nowrap">
                           {authsign.map((sig, key) => (
                             <span key={key}>{sig.indicomp_full_name}</span>
                           ))}
@@ -1513,9 +1540,8 @@ const ReceiptOne = () => {
                           <div className="text-center p-1">
                             <p className="text-xs font-medium mx-auto max-w-[100%]">
                               {`${chapter.chapter_name}`}{" "}
-                              {`${chapter?.chapter_address || ""}, ${chapter?.chapter_city || ""} - ${
-                                chapter?.chapter_pin || ""
-                              }, ${chapter?.chapter_state || ""} 
+                              {`${chapter?.chapter_address || ""}, ${chapter?.chapter_city || ""} - ${chapter?.chapter_pin || ""
+                                }, ${chapter?.chapter_state || ""} 
                   ${chapter?.chapter_email ? `Email: ${chapter.chapter_email} |` : ""} 
                   ${chapter?.chapter_website ? `${chapter.chapter_website} |` : ""} 
                   ${chapter?.chapter_phone ? `Ph: ${chapter.chapter_phone} |` : ""} 
@@ -1531,21 +1557,36 @@ const ReceiptOne = () => {
 
                   {receipts.receipt_donation_type === "Membership" && (
                     <div>
-                      <p className="font-serif text-[18px] text-justify my-5">
-                        With Best regards{" "}
+                      <p className="my-3 mt-6 font-serif text-[18px]">
+                        With Best regards
                       </p>
-                      <p className="font-serif text-[18px] text-justify my-5">
-                        Yours sincerely{" "}
+                      <p className="font-serif text-[18px]">
+                        Yours sincerely
                       </p>
-                      <p className="font-serif text-[18px] text-justify my-5">
-                        {authsign.map((sig, key) => (
-                          <span key={key}>{sig.indicomp_full_name}</span>
-                        ))}
+
+                      <div className="relative h-24 min-w-[200px]">
+                        {/* NAME (bottom layer) */}
+                        <p className="font-serif text-[18px] absolute bottom-0 left-0 z-0 whitespace-nowrap">
+                          {authsign.map((sig, key) => (
+                            <span key={key}>{sig.indicomp_full_name}</span>
+                          ))}
+                        </p>
+
+                        {/* SIGNATURE (overlapping layer) */}
+                        {showSignature === "Yes" &&
+                          receiptData?.auth_sign?.[0]?.indicomp_image_sign && (
+                            <img
+                              src={signature}
+                              alt="Authorized Signature"
+                              className="absolute bottom-1 left-0 h-[122px] w-auto z-10 p-1"
+                            />
+                          )}
+                      </div>
+
+                      <p className="font-serif text-[18px]">
+                        {chapter.auth_sign}
                       </p>
-                      <p className="font-serif text-[18px] text-justify my-5">
-                        {chapter.auth_sign}{" "}
-                      </p>
-                      <p className="font-serif text-[18px] text-justify my-5">
+                      <p className="my-3 mt-6 font-serif text-[18px]">
                         Encl: As stated above
                       </p>
                     </div>

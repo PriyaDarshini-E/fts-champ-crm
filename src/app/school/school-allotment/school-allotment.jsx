@@ -147,7 +147,7 @@ const SchoolToAllot = () => {
     prefetchPage,
     refetch,
   } = useGetMutation("schooltoallot", SCHOOL_TO_ALOT_LIST, {
-    page: pagination.pageIndex + 1,
+    ...(debouncedSearchTerm ? {} : { page: pagination.pageIndex + 1 }),
     ...(debouncedSearchTerm ? { search: debouncedSearchTerm } : {}),
     ...(selectedYear ? { financial_year: selectedYear } : {}), // add year filter
   });
@@ -155,6 +155,7 @@ const SchoolToAllot = () => {
   const years = Object.keys(yearCounts).sort();
 
   useEffect(() => {
+    if (debouncedSearchTerm) return;
     const currentPage = pagination.pageIndex + 1;
     const totalPages = schooltoallotData?.data?.last_page || 1;
 

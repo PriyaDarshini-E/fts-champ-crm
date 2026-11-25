@@ -162,6 +162,7 @@ const ClosedSchooll = () => {
   }, [location.state, refetch]);
 
   useEffect(() => {
+    if (debouncedSearchTerm) return;
     if (!schoolData?.data?.last_page) return;
 
     const currentPage = pagination.pageIndex + 1;

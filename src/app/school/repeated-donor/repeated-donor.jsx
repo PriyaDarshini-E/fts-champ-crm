@@ -73,7 +73,7 @@ const RepeatDonor = () => {
     "repeatdonor",
     `${REAPEAT_DONOR_LIST}?year=${currentYear}`,
     {
-      page: pagination.pageIndex + 1,
+      ...(debouncedSearchTerm ? {} : { page: pagination.pageIndex + 1 }),
       ...(debouncedSearchTerm ? { search: debouncedSearchTerm } : {}),
     },
   );
@@ -125,6 +125,7 @@ const RepeatDonor = () => {
   }, [searchTerm]);
 
   useEffect(() => {
+    if (debouncedSearchTerm) return;
     const currentPage = pagination.pageIndex + 1;
     const totalPages = repeatData?.data?.last_page || 1;
 

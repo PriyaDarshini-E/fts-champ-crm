@@ -151,12 +151,12 @@ const DonorList = () => {
     queryKey: ["donors", debouncedSearchTerm, pagination.pageIndex + 1],
     queryFn: async () => {
       const token = Cookies.get("token");
-      const params = new URLSearchParams({
-        page: (pagination.pageIndex + 1).toString(),
-      });
+      const params = new URLSearchParams();
 
       if (debouncedSearchTerm) {
         params.append("search", debouncedSearchTerm);
+      } else {
+        params.append("page", (pagination.pageIndex + 1).toString());
       }
 
       const response = await axios.get(`${BASE_URL}/api/donor?${params}`, {
@@ -172,6 +172,7 @@ const DonorList = () => {
   });
 
   useEffect(() => {
+    if (debouncedSearchTerm) return;
     const currentPage = pagination.pageIndex + 1;
     const totalPages = donorsData?.data?.last_page || 1;
 

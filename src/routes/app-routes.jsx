@@ -659,6 +659,22 @@ function AppRoutes() {
           }
         />
         <Route
+          path="/cpr-report/create"
+          element={
+            <Suspense fallback={<LoadingBar />}>
+              <CPRReportIndex />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/cpr-report/:id"
+          element={
+            <Suspense fallback={<LoadingBar />}>
+              <CPRReportIndex />
+            </Suspense>
+          }
+        />
+        <Route
           path="/cpr-bank"
           element={
             <Suspense fallback={<LoadingBar />}>

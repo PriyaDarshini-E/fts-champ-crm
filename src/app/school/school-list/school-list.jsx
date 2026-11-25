@@ -124,11 +124,12 @@ const SchoolList = () => {
     prefetchPage,
     refetch,
   } = useGetMutation("schoollist", `${SCHOOL_LIST}?year=${currentYear}`, {
-    page: pagination.pageIndex + 1,
+    ...(debouncedSearchTerm ? {} : { page: pagination.pageIndex + 1 }),
     ...(debouncedSearchTerm ? { search: debouncedSearchTerm } : {}),
   });
 
   useEffect(() => {
+    if (debouncedSearchTerm) return;
     if (!schoolData?.data?.school?.last_page) return;
 
     const currentPage = pagination.pageIndex + 1;

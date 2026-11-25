@@ -88,7 +88,7 @@ const SchoolAllotEdit = () => {
     `schoolListById${donorId}`,
     `${FETCH_SCHOOL_ALLOT_LIST_BY_ID}?year=${donorYear}&id=${donorId}`,
     {
-      page: pagination.pageIndex + 1,
+      ...(debouncedSearchTerm ? {} : { page: pagination.pageIndex + 1 }),
       ...(debouncedSearchTerm ? { search: debouncedSearchTerm } : {}),
     },
   );
@@ -114,6 +114,7 @@ const SchoolAllotEdit = () => {
     }
   }, [donorId, donorYear]);
   useEffect(() => {
+    if (debouncedSearchTerm) return;
     if (!schoolData?.last_page) return;
 
     const currentPage = pagination.pageIndex + 1;

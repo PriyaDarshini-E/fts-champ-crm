@@ -134,6 +134,7 @@ const SuperReceiptDonor = () => {
 
   // Prefetch next and previous pages
   useEffect(() => {
+    if (debouncedSearchTerm) return;
     const currentPage = pagination.pageIndex + 1;
     const totalPages = donorsData?.last_page || 1;
 
@@ -236,9 +237,7 @@ const SuperReceiptDonor = () => {
     ],
     queryFn: async () => {
       const token = Cookies.get("token");
-      const params = new URLSearchParams({
-        page: (pagination.pageIndex + 1).toString(),
-      });
+      const params = new URLSearchParams();
 
       if (selectedChapter) {
         params.append("chapter", selectedChapter);
@@ -246,6 +245,8 @@ const SuperReceiptDonor = () => {
 
       if (debouncedSearchTerm) {
         params.append("search", debouncedSearchTerm);
+      } else {
+        params.append("page", (pagination.pageIndex + 1).toString());
       }
 
       const response = await axios.get(`${BASE_URL}${CHANGE_DONOR}?${params}`, {

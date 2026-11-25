@@ -128,12 +128,12 @@ const DuplicateDonor = () => {
     queryKey: ["duplicateList", debouncedSearchTerm, pagination.pageIndex + 1],
     queryFn: async () => {
       const token = Cookies.get("token");
-      const params = new URLSearchParams({
-        page: (pagination.pageIndex + 1).toString(),
-      });
+      const params = new URLSearchParams();
       
       if (debouncedSearchTerm) {
         params.append("search", debouncedSearchTerm);
+      } else {
+        params.append("page", (pagination.pageIndex + 1).toString());
       }
 
       const response = await axios.get(
@@ -152,6 +152,7 @@ const DuplicateDonor = () => {
 
   // Prefetch next and previous pages - MOVED AFTER duplicateData is defined
   useEffect(() => {
+    if (debouncedSearchTerm) return;
     const currentPage = pagination.pageIndex + 1;
     const totalPages = duplicateData?.last_page || 1;
     

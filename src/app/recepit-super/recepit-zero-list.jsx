@@ -87,10 +87,11 @@ const RecepitZeroList = () => {
     prefetchPage,
     refetch,
   } = useGetMutation("recepit-zero-list", `${RECEIPT_ZERO_LIST}`, {
-    page: pagination.pageIndex + 1,
+    ...(debouncedSearchTerm ? {} : { page: pagination.pageIndex + 1 }),
     ...(debouncedSearchTerm ? { search: debouncedSearchTerm } : {}),
   });
   useEffect(() => {
+    if (debouncedSearchTerm) return;
     const currentPage = pagination.pageIndex + 1;
     const totalPages = receiptData?.data?.last_page || 1;
 
