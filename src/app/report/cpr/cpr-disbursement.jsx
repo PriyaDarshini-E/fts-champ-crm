@@ -294,14 +294,14 @@ const CPRDisbursement = () => {
       const list = Array.isArray(raw)
         ? raw
         : Array.isArray(raw?.data)
-        ? raw.data
-        : Array.isArray(raw?.cpr_disbursement)
-        ? raw.cpr_disbursement
-        : Array.isArray(raw?.disbursements)
-        ? raw.disbursements
-        : raw?.data && typeof raw.data === "object"
-        ? [raw.data]
-        : [];
+          ? raw.data
+          : Array.isArray(raw?.cpr_disbursement)
+            ? raw.cpr_disbursement
+            : Array.isArray(raw?.disbursements)
+              ? raw.disbursements
+              : raw?.data && typeof raw.data === "object"
+                ? [raw.data]
+                : [];
 
       setDisbursementList(list);
     } catch (error) {
@@ -479,6 +479,10 @@ const CPRDisbursement = () => {
         toast.error(`Entry #${entryNum}: No. of Acharyas Paid is required`);
         return;
       }
+      if (!s.no_of_acharyas_paid || Number(s.no_of_karyakarata_paid) < 0) {
+        toast.error(`Entry #${entryNum}: No. of Karyakarata Paid is required`);
+        return;
+      }
       if (!s.up_to_month_paid?.trim()) {
         toast.error(`Entry #${entryNum}: Up to Month Paid is required`);
         return;
@@ -565,8 +569,8 @@ const CPRDisbursement = () => {
       }
       toast.error(
         error?.response?.data?.message ||
-          error?.message ||
-          "Failed to save CPR Disbursement data"
+        error?.message ||
+        "Failed to save CPR Disbursement data"
       );
     } finally {
       setSubmitting(false);
@@ -635,8 +639,8 @@ const CPRDisbursement = () => {
       console.error("Error fetching CPR Disbursement by ID:", err);
       toast.error(
         err?.response?.data?.message ||
-          err?.message ||
-          "Failed to load disbursement details"
+        err?.message ||
+        "Failed to load disbursement details"
       );
     } finally {
       setFetchingEdit(false);
@@ -674,6 +678,10 @@ const CPRDisbursement = () => {
     }
     if (!editFormData.no_of_acharyas_paid || Number(editFormData.no_of_acharyas_paid) < 0) {
       toast.error("No. of Acharyas Paid is required");
+      return;
+    }
+    if (!editFormData.no_of_karyakarata_paid || Number(editFormData.no_of_acharyas_paid) < 0) {
+      toast.error("No. of Karyakarata Paid is required");
       return;
     }
     if (!editFormData.up_to_month_paid?.trim()) {
@@ -760,8 +768,8 @@ const CPRDisbursement = () => {
       }
       toast.error(
         error?.response?.data?.message ||
-          error?.message ||
-          "Failed to update CPR Disbursement"
+        error?.message ||
+        "Failed to update CPR Disbursement"
       );
     } finally {
       setUpdating(false);
@@ -802,8 +810,8 @@ const CPRDisbursement = () => {
       console.error("Error deleting cpr-disbursement:", error);
       toast.error(
         error?.response?.data?.message ||
-          error?.message ||
-          "Failed to delete CPR Disbursement"
+        error?.message ||
+        "Failed to delete CPR Disbursement"
       );
     } finally {
       setDeleting(false);
@@ -1025,7 +1033,7 @@ const CPRDisbursement = () => {
                     </TableCell>
                     <TableCell className="py-3 px-4 text-xs text-right font-semibold text-emerald-700">
                       {item.total_remittance_this_month !== undefined &&
-                      item.total_remittance_this_month !== null
+                        item.total_remittance_this_month !== null
                         ? `₹${Number(item.total_remittance_this_month).toLocaleString("en-IN")}`
                         : "—"}
                     </TableCell>
@@ -1291,6 +1299,25 @@ const CPRDisbursement = () => {
                         required
                       />
                     </div>
+
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">
+                        No. of Karyakarata Paid <span className="text-red-500">*</span>
+                      </label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={sub.no_of_karyakarata_paid}
+                        onChange={(e) =>
+                          handleSubChange(idx, "no_of_karyakarata_paid", e.target.value)
+                        }
+                        placeholder="e.g. 28"
+                        className="text-xs h-9 bg-white text-right"
+                        required
+                      />
+                    </div>
+
+
 
                     {/* Up to Month Paid */}
                     <div>
@@ -1671,6 +1698,24 @@ const CPRDisbursement = () => {
                       setEditFormData({
                         ...editFormData,
                         no_of_acharyas_paid: e.target.value,
+                      })
+                    }
+                    className="text-xs h-9 bg-white text-right"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    No. of Karyakarata Paid <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={editFormData.no_of_karyakarata_paid}
+                    onChange={(e) =>
+                      setEditFormData({
+                        ...editFormData,
+                        no_of_karyakarata_paid: e.target.value,
                       })
                     }
                     className="text-xs h-9 bg-white text-right"

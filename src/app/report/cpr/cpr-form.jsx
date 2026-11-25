@@ -5,6 +5,7 @@ import moment from "moment";
 import BASE_URL from "@/config/base-url";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
+import * as XLSX from "xlsx";
 import {
   Plus,
   Download,
@@ -15,12 +16,22 @@ import {
   X,
   Loader2,
   RefreshCw,
+  FileSpreadsheet,
 } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
 import CPRPrintReport from "./cpr-print-report";
 import { fetchFinancialYearsFromApi } from "@/utils/financial-year";
 import { MASTER_ANCHAL_LIST } from "@/utils/anchal";
+import { useSidebar } from "@/components/ui/sidebar";
+
+const useSafeSidebar = () => {
+  try {
+    return useSidebar();
+  } catch {
+    return null;
+  }
+};
 
 const FINANCIAL_MONTHS = [
   "April",
@@ -54,21 +65,8 @@ const getCurrentMonthName = () => {
   return now.toLocaleString("en-US", { month: "long" });
 };
 
-// Helper to get available months up to current month (strictly hiding future months)
-const getAvailableMonths = (selectedYear, currFY) => {
-  const currentFY = currFY || getCurrentFinancialYear();
-  if (!selectedYear || selectedYear === currentFY) {
-    const currMonth = getCurrentMonthName();
-    const currMonthIdx = FINANCIAL_MONTHS.indexOf(currMonth);
-    if (currMonthIdx !== -1) {
-      return FINANCIAL_MONTHS.slice(0, currMonthIdx + 1);
-    }
-  }
-  // If selected financial year is strictly in the future, allow no months
-  if (selectedYear > currentFY) {
-    return [];
-  }
-  // For past financial years, all 12 months are in the past
+// Helper to get available months (all 12 months available per Priority Matrix)
+const getAvailableMonths = () => {
   return FINANCIAL_MONTHS;
 };
 
@@ -128,6 +126,12 @@ const CPRForm = ({
   onBack = null,
 }) => {
   const navigate = useNavigate();
+  const sidebar = useSafeSidebar();
+  const bottomBarLeft = useMemo(() => {
+    if (!sidebar || sidebar.isMobile) return "0px";
+    return sidebar.open ? "var(--sidebar-width, 16rem)" : "var(--sidebar-width-icon, 3rem)";
+  }, [sidebar?.isMobile, sidebar?.open]);
+
   const [currentReportId, setCurrentReportId] = useState(reportId);
 
   useEffect(() => {
@@ -153,6 +157,29 @@ const CPRForm = ({
     const active = initialYear || Cookies.get("currentYear") || "2026-27";
     return [active];
   });
+  const [chapterList, setChapterList] = useState([]);
+
+  useEffect(() => {
+    const fetchChapters = async () => {
+      try {
+        const token = Cookies.get("token");
+        const res = await axios.get(`${BASE_URL}/api/chapter-active`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        const list = res.data?.data || res.data || [];
+        if (Array.isArray(list)) {
+          setChapterList(
+            list
+              .map((c) => (typeof c === "string" ? c : c.chapter_name || c.name || ""))
+              .filter(Boolean)
+          );
+        }
+      } catch (err) {
+        console.warn("Could not fetch chapters list", err);
+      }
+    };
+    fetchChapters();
+  }, []);
 
   // Track which fields/sections were auto-filled from DB
   const [dbAutoFilled, setDbAutoFilled] = useState({
@@ -233,9 +260,11 @@ const CPRForm = ({
 
   // Section A: Membership Data - cleared
   const [memberships, setMemberships] = useState({
-    chapter: { asOnMarch: "", added: "" },
-    yuva: { asOnMarch: "", added: "" },
-    mahila: { asOnMarch: "", added: "" },
+    chapter: { asOnMarch: "", added: "", tillDate: "" },
+    yuva: { asOnMarch: "", added: "", tillDate: "" },
+    mahila: { asOnMarch: "", added: "", tillDate: "" },
+    renewal: { asOnMarch: "", added: "", tillDate: "" },
+    newMember: { asOnMarch: "", added: "", tillDate: "" },
   });
 
   const sectionATotals = useMemo(() => {
@@ -247,14 +276,36 @@ const CPRForm = ({
     const addedSum =
       (Number(memberships.chapter.added) || 0) +
       (Number(memberships.yuva.added) || 0) +
-      (Number(memberships.mahila.added) || 0);
+      (Number(memberships.mahila.added) || 0) +
+      (Number(memberships.renewal.added) || 0) +
+      (Number(memberships.newMember.added) || 0);
 
-    const cumulativeSum = addedSum;
-    const amountSum = cumulativeSum * 1000;
+    const tillDateSum =
+      (Number(memberships.chapter.tillDate || memberships.chapter.added) || 0) +
+      (Number(memberships.yuva.tillDate || memberships.yuva.added) || 0) +
+      (Number(memberships.mahila.tillDate || memberships.mahila.added) || 0) +
+      (Number(memberships.renewal.tillDate || memberships.renewal.added) || 0) +
+      (Number(memberships.newMember.tillDate || memberships.newMember.added) || 0);
+
+    const getRowCumulative = (row) => {
+      const march = Number(row?.asOnMarch) || 0;
+      const td = Number(row?.tillDate !== undefined && row?.tillDate !== "" ? row?.tillDate : row?.added) || 0;
+      return march + td;
+    };
+
+    const cumulativeSum =
+      getRowCumulative(memberships.chapter) +
+      getRowCumulative(memberships.yuva) +
+      getRowCumulative(memberships.mahila) +
+      getRowCumulative(memberships.renewal) +
+      getRowCumulative(memberships.newMember);
+
+    const amountSum = tillDateSum * 1000;
 
     return {
       asOnMarch: marchSum || "",
       added: addedSum || "",
+      tillDate: tillDateSum || "",
       cumulative: cumulativeSum || "",
       amount: amountSum ? formatINR(amountSum) : "",
     };
@@ -309,35 +360,151 @@ const CPRForm = ({
   // Section C: OTS Details & Collection - cleared
   const [otsPRP, setOtsPRP] = useState("");
   const [otsCountDuringMonth, setOtsCountDuringMonth] = useState("");
-  const [otsAmountOverride, setOtsAmountOverride] = useState(null);
-  const otsCountTillDate = otsCountDuringMonth;
-  const otsAmountDuringMonth =
-    otsAmountOverride !== null
-      ? otsAmountOverride
-      : otsCountDuringMonth
-      ? (Number(otsCountDuringMonth) || 0) * 30000
-      : 0;
-  const otsAmountTillDate = otsAmountDuringMonth;
+  const [otsCountTillDateInput, setOtsCountTillDateInput] = useState("");
+  const [otsTotalAmountDuringMonth, setOtsTotalAmountDuringMonth] = useState("");
+  const [otsTotalAmountTillDate, setOtsTotalAmountTillDate] = useState("");
+  const [otsExtraAmountDuringMonth, setOtsExtraAmountDuringMonth] = useState("");
+  const [otsExtraAmountTillDate, setOtsExtraAmountTillDate] = useState("");
+
+  const otsCountTillDate = otsCountTillDateInput !== "" ? otsCountTillDateInput : otsCountDuringMonth;
+
+  // Derivations for Regular, Extra, and Total OTS:
+  // 1 regular OTS = ₹30,000
+  const otsCountDuringNum = Number(otsCountDuringMonth) || 0;
+  const otsCountTillNum = Number(otsCountTillDate) || 0;
+
+  const otsRegularDuring = otsCountDuringNum > 0 ? otsCountDuringNum * 30000 : 0;
+  const otsRegularTill = otsCountTillNum > 0 ? otsCountTillNum * 30000 : 0;
+
+  // Monthly Extra & Total OTS
+  let otsTotalDuring = 0;
+  let otsExtraDuring = 0;
+  if (otsTotalAmountDuringMonth !== "") {
+    otsTotalDuring = Number(otsTotalAmountDuringMonth) || 0;
+    otsExtraDuring = Math.max(0, otsTotalDuring - otsRegularDuring);
+  } else if (otsExtraAmountDuringMonth !== "") {
+    otsExtraDuring = Number(otsExtraAmountDuringMonth) || 0;
+    otsTotalDuring = otsRegularDuring + otsExtraDuring;
+  } else {
+    otsExtraDuring = 0;
+    otsTotalDuring = otsRegularDuring;
+  }
+
+  // Till Date Extra & Total OTS
+  let otsTotalTill = 0;
+  let otsExtraTill = 0;
+  if (otsTotalAmountTillDate !== "") {
+    otsTotalTill = Number(otsTotalAmountTillDate) || 0;
+    otsExtraTill = Math.max(0, otsTotalTill - otsRegularTill);
+  } else if (otsExtraAmountTillDate !== "") {
+    otsExtraTill = Number(otsExtraAmountTillDate) || 0;
+    otsTotalTill = otsRegularTill + otsExtraTill;
+  } else {
+    otsExtraTill = otsExtraDuring;
+    otsTotalTill = otsRegularTill + otsExtraTill;
+  }
+
+  const otsAmountDuringMonth = otsTotalDuring;
+  const otsAmountTillDate = otsTotalTill;
+
+  // Input change handlers to auto-classify Regular and Extra OTS
+  const handleOtsCountDuringChange = (val) => {
+    setOtsCountDuringMonth(val);
+    const countNum = Number(val) || 0;
+    const reg = countNum * 30000;
+    if (otsTotalAmountDuringMonth !== "") {
+      const tot = Number(otsTotalAmountDuringMonth) || 0;
+      setOtsExtraAmountDuringMonth(String(Math.max(0, tot - reg)));
+    } else if (otsExtraAmountDuringMonth !== "") {
+      const ext = Number(otsExtraAmountDuringMonth) || 0;
+      setOtsTotalAmountDuringMonth(String(reg + ext));
+    }
+  };
+
+  const handleOtsCountTillChange = (val) => {
+    setOtsCountTillDateInput(val);
+    const countNum = Number(val) || 0;
+    const reg = countNum * 30000;
+    if (otsTotalAmountTillDate !== "") {
+      const tot = Number(otsTotalAmountTillDate) || 0;
+      setOtsExtraAmountTillDate(String(Math.max(0, tot - reg)));
+    } else if (otsExtraAmountTillDate !== "") {
+      const ext = Number(otsExtraAmountTillDate) || 0;
+      setOtsTotalAmountTillDate(String(reg + ext));
+    }
+  };
+
+  const handleOtsTotalDuringChange = (val) => {
+    setOtsTotalAmountDuringMonth(val);
+    if (val === "") {
+      setOtsExtraAmountDuringMonth("");
+    } else {
+      const tot = Number(val) || 0;
+      setOtsExtraAmountDuringMonth(String(Math.max(0, tot - otsRegularDuring)));
+    }
+  };
+
+  const handleOtsTotalTillChange = (val) => {
+    setOtsTotalAmountTillDate(val);
+    if (val === "") {
+      setOtsExtraAmountTillDate("");
+    } else {
+      const tot = Number(val) || 0;
+      setOtsExtraAmountTillDate(String(Math.max(0, tot - otsRegularTill)));
+    }
+  };
+
+  const handleOtsExtraDuringChange = (val) => {
+    setOtsExtraAmountDuringMonth(val);
+    if (val === "") {
+      setOtsTotalAmountDuringMonth(otsRegularDuring ? String(otsRegularDuring) : "");
+    } else {
+      const ext = Number(val) || 0;
+      setOtsTotalAmountDuringMonth(String(otsRegularDuring + ext));
+    }
+  };
+
+  const handleOtsExtraTillChange = (val) => {
+    setOtsExtraAmountTillDate(val);
+    if (val === "") {
+      setOtsTotalAmountTillDate(otsRegularTill ? String(otsRegularTill) : "");
+    } else {
+      const ext = Number(val) || 0;
+      setOtsTotalAmountTillDate(String(otsRegularTill + ext));
+    }
+  };
 
   // Section D: Donation & CSR Details - cleared
   const [donations, setDonations] = useState({
-    general: { during: "", till: "" },
-    csr: { during: "", till: "" },
-    other: { during: "", till: "" },
+    general: { donors: "", during: "", till: "" },
+    csr: { donors: "", during: "", till: "" },
+    nonCsr: { donors: "", during: "", till: "" },
+    other: { donors: "", during: "", till: "" },
   });
 
   const donationTotals = useMemo(() => {
+    const nonCsrObj = donations.nonCsr || donations.other || {};
+    const totalDonors =
+      (Number(donations.general?.donors) || 0) +
+      (Number(donations.csr?.donors) || 0) +
+      (Number(nonCsrObj?.donors) || 0);
+
     const during =
-      (Number(donations.general.during) || 0) +
-      (Number(donations.csr.during) || 0) +
-      (Number(donations.other.during) || 0);
+      (Number(donations.general?.during) || 0) +
+      (Number(donations.csr?.during) || 0) +
+      (Number(nonCsrObj?.during) || 0);
+
     const till =
-      (Number(donations.general.till) || 0) +
-      (Number(donations.csr.till) || 0) +
-      (Number(donations.other.till) || 0);
+      (Number(donations.general?.till) || 0) +
+      (Number(donations.csr?.till) || 0) +
+      (Number(nonCsrObj?.till) || 0);
+
     return {
+      donors: totalDonors || "",
       during: during ? formatINR(during) : "",
       till: till ? formatINR(till) : "",
+      duringRaw: during,
+      tillRaw: till,
     };
   }, [donations]);
 
@@ -541,13 +708,17 @@ const CPRForm = ({
     return `${BASE_URL}/storage/${filename}`;
   };
 
-  // Sign & Submit & PDF refs
+  // Sign & Submit & PDF / Excel refs
   const [signedFile, setSignedFile] = useState(null);
   const [existingSignedCprUrl, setExistingSignedCprUrl] = useState("");
+  const [rawExcelFile, setRawExcelFile] = useState(null);
+  const [existingRawExcelUrl, setExistingRawExcelUrl] = useState("");
+  const rawExcelInputRef = useRef(null);
   const [loadingReport, setLoadingReport] = useState(false);
   const fileInputRef = useRef(null);
   const printableRef = useRef(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [isGeneratingExcel, setIsGeneratingExcel] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Active section tracking for left sticky sidebar
@@ -619,13 +790,21 @@ const CPRForm = ({
       setSubChapters(data.sub_chapters);
     }
 
-    // Section A: Membership Details (supports membership_DataBeforeMonth & membership_DataCurrentMonth)
-    if (Array.isArray(data.membership_DataBeforeMonth) || Array.isArray(data.membership_DataCurrentMonth)) {
+    // Section A: Membership Details (supports membership_DataBeforeMonth & membership_DataCurrentMonth & renewal_members/new_members)
+    const hasMembershipData =
+      Array.isArray(data.membership_DataBeforeMonth) ||
+      Array.isArray(data.membership_DataCurrentMonth) ||
+      data.renewal_members !== undefined ||
+      data.new_members !== undefined;
+
+    if (hasMembershipData) {
       setMemberships((prev) => {
         const next = {
           chapter: { ...prev.chapter },
           yuva: { ...prev.yuva },
           mahila: { ...prev.mahila },
+          renewal: { ...prev.renewal },
+          newMember: { ...prev.newMember },
         };
         if (Array.isArray(data.membership_DataBeforeMonth)) {
           data.membership_DataBeforeMonth.forEach((item) => {
@@ -643,6 +822,21 @@ const CPRForm = ({
             else next.chapter.added = String(item.total_count ?? "");
           });
         }
+
+        // Apply root-level fields from response into Renewal Members and New Members
+        if (data.renewal_members !== undefined && data.renewal_members !== null) {
+          next.renewal.added = String(data.renewal_members);
+        }
+        if (data.renewal_members_till_date !== undefined && data.renewal_members_till_date !== null) {
+          next.renewal.tillDate = String(data.renewal_members_till_date);
+        }
+        if (data.new_members !== undefined && data.new_members !== null) {
+          next.newMember.added = String(data.new_members);
+        }
+        if (data.new_members_till_date !== undefined && data.new_members_till_date !== null) {
+          next.newMember.tillDate = String(data.new_members_till_date);
+        }
+
         return next;
       });
     } else {
@@ -652,14 +846,27 @@ const CPRForm = ({
           chapter: {
             asOnMarch: cleanVal(memberData.chapter?.asOnMarch) || prev.chapter.asOnMarch,
             added: cleanVal(memberData.chapter?.added) || prev.chapter.added,
+            tillDate: cleanVal(memberData.chapter?.tillDate) || prev.chapter.tillDate,
           },
           yuva: {
             asOnMarch: cleanVal(memberData.yuva?.asOnMarch) || prev.yuva.asOnMarch,
             added: cleanVal(memberData.yuva?.added) || prev.yuva.added,
+            tillDate: cleanVal(memberData.yuva?.tillDate) || prev.yuva.tillDate,
           },
           mahila: {
             asOnMarch: cleanVal(memberData.mahila?.asOnMarch) || prev.mahila.asOnMarch,
             added: cleanVal(memberData.mahila?.added) || prev.mahila.added,
+            tillDate: cleanVal(memberData.mahila?.tillDate) || prev.mahila.tillDate,
+          },
+          renewal: {
+            asOnMarch: cleanVal(memberData.renewal?.asOnMarch) || prev.renewal.asOnMarch,
+            added: cleanVal(data.renewal_members ?? memberData.renewal?.added) || prev.renewal.added,
+            tillDate: cleanVal(data.renewal_members_till_date ?? memberData.renewal?.tillDate) || prev.renewal.tillDate,
+          },
+          newMember: {
+            asOnMarch: cleanVal(memberData.newMember?.asOnMarch) || prev.newMember.asOnMarch,
+            added: cleanVal(data.new_members ?? memberData.newMember?.added) || prev.newMember.added,
+            tillDate: cleanVal(data.new_members_till_date ?? memberData.newMember?.tillDate) || prev.newMember.tillDate,
           },
         }));
       } else if (data.chapter_members_as_on_march !== undefined || data.as_on_march_chapter !== undefined) {
@@ -667,14 +874,27 @@ const CPRForm = ({
           chapter: {
             asOnMarch: cleanVal(data.chapter_members_as_on_march ?? data.as_on_march_chapter) || prev.chapter.asOnMarch,
             added: cleanVal(data.chapter_members_added ?? data.added_chapter) || prev.chapter.added,
+            tillDate: prev.chapter.tillDate,
           },
           yuva: {
             asOnMarch: cleanVal(data.yuva_members_as_on_march ?? data.as_on_march_yuva) || prev.yuva.asOnMarch,
             added: cleanVal(data.yuva_members_added ?? data.added_yuva) || prev.yuva.added,
+            tillDate: prev.yuva.tillDate,
           },
           mahila: {
             asOnMarch: cleanVal(data.mahila_members_as_on_march ?? data.as_on_march_mahila) || prev.mahila.asOnMarch,
             added: cleanVal(data.mahila_members_added ?? data.added_mahila) || prev.mahila.added,
+            tillDate: prev.mahila.tillDate,
+          },
+          renewal: {
+            asOnMarch: prev.renewal.asOnMarch,
+            added: cleanVal(data.renewal_members) || prev.renewal.added,
+            tillDate: cleanVal(data.renewal_members_till_date) || prev.renewal.tillDate,
+          },
+          newMember: {
+            asOnMarch: prev.newMember.asOnMarch,
+            added: cleanVal(data.new_members) || prev.newMember.added,
+            tillDate: cleanVal(data.new_members_till_date) || prev.newMember.tillDate,
           },
         }));
       }
@@ -684,12 +904,12 @@ const CPRForm = ({
     const meetList = Array.isArray(data.executive_committee_meeting)
       ? data.executive_committee_meeting
       : Array.isArray(data.executive_committee_meetings)
-      ? data.executive_committee_meetings
-      : Array.isArray(data.meeting)
-      ? data.meeting
-      : Array.isArray(data.meetings)
-      ? data.meetings
-      : null;
+        ? data.executive_committee_meetings
+        : Array.isArray(data.meeting)
+          ? data.meeting
+          : Array.isArray(data.meetings)
+            ? data.meetings
+            : null;
     if (meetList) {
       setMeetings(
         meetList.map((m, i) => ({
@@ -734,11 +954,20 @@ const CPRForm = ({
 
     // Section C: OTS (supports ots_details: { receipt_no_of_ots, receipt_total_amount })
     if (data.ots_details && typeof data.ots_details === "object") {
-      if (data.ots_details.receipt_no_of_ots !== undefined) {
-        setOtsCountDuringMonth(cleanVal(data.ots_details.receipt_no_of_ots));
+      const countVal = cleanVal(data.ots_details.receipt_no_of_ots ?? data.ots_count_during_month ?? data.ots_count);
+      if (countVal !== "") {
+        setOtsCountDuringMonth(countVal);
       }
       if (data.ots_details.receipt_total_amount !== undefined) {
-        setOtsAmountOverride(Number(data.ots_details.receipt_total_amount));
+        const totAmt = cleanVal(data.ots_details.receipt_total_amount);
+        setOtsTotalAmountDuringMonth(totAmt);
+        const cnt = Number(countVal || otsCountDuringMonth) || 0;
+        const reg = cnt * 30000;
+        const extra = Math.max(0, (Number(totAmt) || 0) - reg);
+        setOtsExtraAmountDuringMonth(String(extra));
+      }
+      if (data.ots_extra_amount !== undefined || data.ots_details.extra_amount !== undefined) {
+        setOtsExtraAmountDuringMonth(cleanVal(data.ots_extra_amount ?? data.ots_details.extra_amount));
       }
       if (data.ots_details.prp !== undefined || data.ots_details.ots_prp !== undefined) {
         setOtsPRP(cleanVal(data.ots_details.prp ?? data.ots_details.ots_prp));
@@ -750,82 +979,163 @@ const CPRForm = ({
       if (data.ots_count_during_month !== undefined || data.ots_during_month !== undefined || data.ots_count !== undefined) {
         setOtsCountDuringMonth(cleanVal(data.ots_count_during_month ?? data.ots_during_month ?? data.ots_count));
       }
+      if (data.ots_total_amount !== undefined || data.ots_amount !== undefined) {
+        setOtsTotalAmountDuringMonth(cleanVal(data.ots_total_amount ?? data.ots_amount));
+      }
+      if (data.ots_extra_amount !== undefined) {
+        setOtsExtraAmountDuringMonth(cleanVal(data.ots_extra_amount));
+      }
+    }
+
+    // Check till date OTS if present
+    if (data.ots_details_till_date && typeof data.ots_details_till_date === "object") {
+      if (data.ots_details_till_date.receipt_no_of_ots !== undefined) {
+        setOtsCountTillDateInput(cleanVal(data.ots_details_till_date.receipt_no_of_ots));
+      }
+      if (data.ots_details_till_date.receipt_total_amount !== undefined) {
+        const totAmtTill = cleanVal(data.ots_details_till_date.receipt_total_amount);
+        setOtsTotalAmountTillDate(totAmtTill);
+        const cntTill = Number(data.ots_details_till_date.receipt_no_of_ots) || 0;
+        const regTill = cntTill * 30000;
+        const extraTill = Math.max(0, (Number(totAmtTill) || 0) - regTill);
+        setOtsExtraAmountTillDate(String(extraTill));
+      }
+    } else {
+      if (data.ots_count_till_date !== undefined) {
+        setOtsCountTillDateInput(cleanVal(data.ots_count_till_date));
+      }
+      if (data.ots_total_amount_till_date !== undefined || data.ots_amount_till_date !== undefined) {
+        setOtsTotalAmountTillDate(cleanVal(data.ots_total_amount_till_date ?? data.ots_amount_till_date));
+      }
+      if (data.ots_extra_amount_till_date !== undefined) {
+        setOtsExtraAmountTillDate(cleanVal(data.ots_extra_amount_till_date));
+      }
     }
 
     // Section D: Donations (supports csr_donation_details, non_csr_donation_details, general_donation)
     if (
       data.csr_donation_details ||
+      data.csr_donation ||
       data.general_donation ||
-      data.non_csr_donation_details
+      data.general_donation_details ||
+      data.non_csr_donation_details ||
+      data.non_csr_donation
     ) {
-      setDonations((prev) => ({
-        general: {
-          during:
-            data.general_donation?.receipt_total_amount !== undefined
-              ? String(data.general_donation.receipt_total_amount)
-              : prev.general.during,
-          till:
-            data.general_donation?.receipt_total_amount_till !== undefined
-              ? String(data.general_donation.receipt_total_amount_till)
-              : data.general_donation?.receipt_total_amount !== undefined
-              ? String(data.general_donation.receipt_total_amount)
-              : prev.general.till,
-        },
-        csr: {
-          during:
-            data.csr_donation_details?.receipt_total_amount !== undefined
-              ? String(data.csr_donation_details.receipt_total_amount)
-              : prev.csr.during,
-          till:
-            data.csr_donation_details?.receipt_total_amount_till !== undefined
-              ? String(data.csr_donation_details.receipt_total_amount_till)
-              : data.csr_donation_details?.receipt_total_amount !== undefined
-              ? String(data.csr_donation_details.receipt_total_amount)
-              : prev.csr.till,
-        },
-        other: {
-          during:
-            data.non_csr_donation_details?.receipt_total_amount !== undefined
-              ? String(data.non_csr_donation_details.receipt_total_amount)
-              : prev.other.during,
-          till:
-            data.non_csr_donation_details?.receipt_total_amount_till !== undefined
-              ? String(data.non_csr_donation_details.receipt_total_amount_till)
-              : data.non_csr_donation_details?.receipt_total_amount !== undefined
-              ? String(data.non_csr_donation_details.receipt_total_amount)
-              : prev.other.till,
-        },
-      }));
+      const parseDonEntry = (obj, tillObj, prevEntry) => {
+        const during =
+          obj?.receipt_total_amount !== undefined
+            ? String(obj.receipt_total_amount)
+            : obj?.during !== undefined
+              ? String(obj.during)
+              : prevEntry?.during ?? "";
+        const till =
+          tillObj?.receipt_total_amount !== undefined
+            ? String(tillObj.receipt_total_amount)
+            : obj?.receipt_total_amount_till !== undefined
+              ? String(obj.receipt_total_amount_till)
+              : tillObj?.till !== undefined
+                ? String(tillObj.till)
+                : obj?.receipt_total_amount !== undefined
+                  ? String(obj.receipt_total_amount)
+                  : prevEntry?.till ?? "";
+        const donors =
+          obj?.receipt_count !== undefined
+            ? String(obj.receipt_count)
+            : obj?.donor_count !== undefined
+              ? String(obj.donor_count)
+              : obj?.donors !== undefined
+                ? String(obj.donors)
+                : obj?.count !== undefined
+                  ? String(obj.count)
+                  : prevEntry?.donors ?? "";
+        return { during, till, donors };
+      };
+
+      setDonations((prev) => {
+        const gen = parseDonEntry(
+          data.general_donation || data.general_donation_details,
+          data.general_donation_till_date,
+          prev.general
+        );
+        const csr = parseDonEntry(
+          data.csr_donation_details || data.csr_donation,
+          data.csr_donation_till_date,
+          prev.csr
+        );
+        const nonCsr = parseDonEntry(
+          data.non_csr_donation_details || data.non_csr_donation,
+          data.non_csr_donation_till_date,
+          prev.nonCsr || prev.other
+        );
+        return {
+          general: gen,
+          csr: csr,
+          nonCsr: nonCsr,
+          other: nonCsr,
+        };
+      });
     } else {
       const donData = data.donation || data.donations;
-      if (donData && typeof donData === "object" && !Array.isArray(donData) && donData.general) {
+      if (
+        donData &&
+        typeof donData === "object" &&
+        !Array.isArray(donData) &&
+        (donData.general || donData.csr || donData.nonCsr || donData.other)
+      ) {
+        const nonCsrObj = donData.nonCsr || donData.other || {};
         setDonations((prev) => ({
           general: {
-            during: cleanVal(donData.general?.during) || prev.general.during,
-            till: cleanVal(donData.general?.till) || prev.general.till,
+            donors: cleanVal(donData.general?.donors) || prev.general?.donors || "",
+            during: cleanVal(donData.general?.during) || prev.general?.during || "",
+            till: cleanVal(donData.general?.till) || prev.general?.till || "",
           },
           csr: {
-            during: cleanVal(donData.csr?.during) || prev.csr.during,
-            till: cleanVal(donData.csr?.till) || prev.csr.till,
+            donors: cleanVal(donData.csr?.donors) || prev.csr?.donors || "",
+            during: cleanVal(donData.csr?.during) || prev.csr?.during || "",
+            till: cleanVal(donData.csr?.till) || prev.csr?.till || "",
+          },
+          nonCsr: {
+            donors: cleanVal(nonCsrObj.donors) || prev.nonCsr?.donors || "",
+            during: cleanVal(nonCsrObj.during) || prev.nonCsr?.during || "",
+            till: cleanVal(nonCsrObj.till) || prev.nonCsr?.till || "",
           },
           other: {
-            during: cleanVal(donData.other?.during) || prev.other.during,
-            till: cleanVal(donData.other?.till) || prev.other.till,
+            donors: cleanVal(nonCsrObj.donors) || prev.other?.donors || "",
+            during: cleanVal(nonCsrObj.during) || prev.other?.during || "",
+            till: cleanVal(nonCsrObj.till) || prev.other?.till || "",
           },
         }));
-      } else if (data.general_donation_during !== undefined || data.csr_donation_during !== undefined) {
+      } else if (
+        data.general_donation_during !== undefined ||
+        data.csr_donation_during !== undefined ||
+        data.non_csr_donation_during !== undefined ||
+        data.other_donation_during !== undefined
+      ) {
+        const nonCsrDuring = cleanVal(data.non_csr_donation_during ?? data.other_donation_during);
+        const nonCsrTill = cleanVal(data.non_csr_donation_till ?? data.other_donation_till);
+        const nonCsrDonors = cleanVal(
+          data.non_csr_donation_donors ?? data.other_donation_donors ?? data.non_csr_donors
+        );
         setDonations({
           general: {
+            donors: cleanVal(data.general_donation_donors ?? data.general_donors),
             during: cleanVal(data.general_donation_during),
             till: cleanVal(data.general_donation_till),
           },
           csr: {
+            donors: cleanVal(data.csr_donation_donors ?? data.csr_donors),
             during: cleanVal(data.csr_donation_during),
             till: cleanVal(data.csr_donation_till),
           },
+          nonCsr: {
+            donors: nonCsrDonors,
+            during: nonCsrDuring,
+            till: nonCsrTill,
+          },
           other: {
-            during: cleanVal(data.other_donation_during),
-            till: cleanVal(data.other_donation_till),
+            donors: nonCsrDonors,
+            during: nonCsrDuring,
+            till: nonCsrTill,
           },
         });
       }
@@ -835,14 +1145,14 @@ const CPRForm = ({
     const bankList = Array.isArray(data.cash_bank_balance)
       ? data.cash_bank_balance
       : Array.isArray(data.bank)
-      ? data.bank
-      : Array.isArray(data.banks)
-      ? data.banks
-      : Array.isArray(data.bank_balances)
-      ? data.bank_balances
-      : Array.isArray(data.cpr_bank)
-      ? data.cpr_bank
-      : null;
+        ? data.bank
+        : Array.isArray(data.banks)
+          ? data.banks
+          : Array.isArray(data.bank_balances)
+            ? data.bank_balances
+            : Array.isArray(data.cpr_bank)
+              ? data.cpr_bank
+              : null;
     if (bankList) {
       setBankBalances(
         bankList.map((b, i) => ({
@@ -858,10 +1168,10 @@ const CPRForm = ({
     const yatraList = Array.isArray(data.vanyatra)
       ? data.vanyatra
       : Array.isArray(data.vanyatras)
-      ? data.vanyatras
-      : Array.isArray(data.cpr_vanyatra)
-      ? data.cpr_vanyatra
-      : null;
+        ? data.vanyatras
+        : Array.isArray(data.cpr_vanyatra)
+          ? data.cpr_vanyatra
+          : null;
     if (yatraList) {
       setVanyatras(
         yatraList.map((y, i) => ({
@@ -883,10 +1193,10 @@ const CPRForm = ({
     const evList = Array.isArray(data.event)
       ? data.event
       : Array.isArray(data.events)
-      ? data.events
-      : Array.isArray(data.cpr_events)
-      ? data.cpr_events
-      : null;
+        ? data.events
+        : Array.isArray(data.cpr_events)
+          ? data.cpr_events
+          : null;
     if (evList) {
       if (evList.length > 0) {
         setNoEventHeld(false);
@@ -918,12 +1228,12 @@ const CPRForm = ({
     const disbList = Array.isArray(data.disbursement)
       ? data.disbursement
       : Array.isArray(data.disbursements)
-      ? data.disbursements
-      : Array.isArray(data.cpr_disbursement)
-      ? data.cpr_disbursement
-      : Array.isArray(data.anchals)
-      ? data.anchals
-      : null;
+        ? data.disbursements
+        : Array.isArray(data.cpr_disbursement)
+          ? data.cpr_disbursement
+          : Array.isArray(data.anchals)
+            ? data.anchals
+            : null;
     if (disbList) {
       setAnchals(
         disbList.map((d, i) => ({
@@ -954,14 +1264,24 @@ const CPRForm = ({
       setCollectionBoxes((prev) => ({
         ...prev,
         boxesThisMonth: cleanVal(cpr.boxes_placed) || prev.boxesThisMonth,
-        boxesTillDate: cleanVal(cpr.boxes_placed) || prev.boxesTillDate,
+      }));
+    }
+    if (cpr.boxes_placed_till_date !== undefined && cpr.boxes_placed_till_date !== null) {
+      setCollectionBoxes((prev) => ({
+        ...prev,
+        boxesTillDate: cleanVal(cpr.boxes_placed_till_date) || prev.boxesTillDate,
       }));
     }
     if (cpr.boxes_amount !== undefined && cpr.boxes_amount !== null) {
       setCollectionBoxes((prev) => ({
         ...prev,
         amountThisMonth: cleanVal(cpr.boxes_amount) || prev.amountThisMonth,
-        amountTillDate: cleanVal(cpr.boxes_amount) || prev.amountTillDate,
+      }));
+    }
+    if (cpr.boxes_amount_till_date !== undefined && cpr.boxes_amount_till_date !== null) {
+      setCollectionBoxes((prev) => ({
+        ...prev,
+        amountTillDate: cleanVal(cpr.boxes_amount_till_date) || prev.amountTillDate,
       }));
     }
     if (
@@ -1045,7 +1365,9 @@ const CPRForm = ({
         (Array.isArray(data.membership_DataCurrentMonth) && data.membership_DataCurrentMonth.length > 0) ||
         data.membership ||
         data.memberships ||
-        data.chapter_members_as_on_march !== undefined
+        data.chapter_members_as_on_march !== undefined ||
+        data.renewal_members !== undefined ||
+        data.new_members !== undefined
       ),
       meetings: Boolean(meetList && meetList.length > 0),
       ots: Boolean(
@@ -1060,17 +1382,25 @@ const CPRForm = ({
       ),
       donations: Boolean(
         data.csr_donation_details ||
+        data.csr_donation ||
         data.general_donation ||
+        data.general_donation_details ||
         data.non_csr_donation_details ||
+        data.non_csr_donation ||
         data.donation ||
         data.donations ||
-        data.general_donation_during !== undefined
+        data.general_donation_during !== undefined ||
+        data.csr_donation_during !== undefined ||
+        data.non_csr_donation_during !== undefined
       ),
       events: Boolean(evList && evList.length > 0),
       banks: Boolean(bankList && bankList.length > 0),
       vanyatras: Boolean(yatraList && yatraList.length > 0),
       disbursements: Boolean(disbList && disbList.length > 0),
-      boxes: Boolean(cpr.boxes_placed !== undefined && cpr.boxes_placed !== null),
+      boxes: Boolean(
+        (cpr.boxes_placed !== undefined && cpr.boxes_placed !== null) ||
+        (cpr.boxes_placed_till_date !== undefined && cpr.boxes_placed_till_date !== null)
+      ),
       investments: Boolean(
         cpr.fixed_deposit != null ||
         cpr.mutual_fund != null ||
@@ -1185,14 +1515,24 @@ const CPRForm = ({
             setCollectionBoxes((prev) => ({
               ...prev,
               boxesThisMonth: cleanVal(report.boxes_placed),
-              boxesTillDate: cleanVal(report.boxes_placed),
+            }));
+          }
+          if (report.boxes_placed_till_date !== undefined && report.boxes_placed_till_date !== null) {
+            setCollectionBoxes((prev) => ({
+              ...prev,
+              boxesTillDate: cleanVal(report.boxes_placed_till_date),
             }));
           }
           if (report.boxes_amount !== undefined && report.boxes_amount !== null) {
             setCollectionBoxes((prev) => ({
               ...prev,
               amountThisMonth: cleanVal(report.boxes_amount),
-              amountTillDate: cleanVal(report.boxes_amount),
+            }));
+          }
+          if (report.boxes_amount_till_date !== undefined && report.boxes_amount_till_date !== null) {
+            setCollectionBoxes((prev) => ({
+              ...prev,
+              amountTillDate: cleanVal(report.boxes_amount_till_date),
             }));
           }
 
@@ -1244,6 +1584,14 @@ const CPRForm = ({
           if (report.signed_cpr && cleanVal(report.signed_cpr)) {
             setExistingSignedCprUrl(cleanVal(report.signed_cpr));
           }
+          const rawExcelUrl =
+            report.raw_excel_file ||
+            report.raw_excel ||
+            report.excel_file ||
+            report.original_excel_file;
+          if (rawExcelUrl && cleanVal(rawExcelUrl)) {
+            setExistingRawExcelUrl(cleanVal(rawExcelUrl));
+          }
 
           // Trigger getCPRReportDetails if financial_year & month are present
           const fy = report.financial_year || financialYear;
@@ -1288,6 +1636,7 @@ const CPRForm = ({
       fd.append(key, str);
     };
 
+    appendStr("chapter_name", chapterName);
     appendStr("financial_year", financialYear || "2026-27");
     appendStr("financial_month", monthName || "April");
     appendStr("name_of_cpp", cppName);
@@ -1295,8 +1644,27 @@ const CPRForm = ({
       "submission_date",
       submissionDate || new Date().toISOString().split("T")[0]
     );
+    if (Array.isArray(subChapters)) {
+      subChapters.forEach((sc, idx) => {
+        appendStr(`sub_chapters[${idx}]`, sc);
+      });
+      appendStr("sub_chapters_json", JSON.stringify(subChapters));
+    }
+    appendStr("ots_prp", otsPRP);
+    appendStr("ots_count", otsCountDuringMonth);
+    appendStr("ots_count_till_date", otsCountTillDate);
+    appendStr("ots_regular_amount", otsRegularDuring);
+    appendStr("ots_regular_amount_till_date", otsRegularTill);
+    appendStr("ots_extra_amount", otsExtraDuring);
+    appendStr("ots_extra_amount_till_date", otsExtraTill);
+    appendStr("ots_total_amount", otsTotalDuring);
+    appendStr("ots_total_amount_till_date", otsTotalTill);
+    appendStr("ots_amount", otsTotalDuring);
+    appendStr("ots_amount_till_date", otsTotalTill);
     appendStr("boxes_placed", collectionBoxes.boxesThisMonth);
+    appendStr("boxes_placed_till_date", collectionBoxes.boxesTillDate);
     appendStr("boxes_amount", collectionBoxes.amountThisMonth);
+    appendStr("boxes_amount_till_date", collectionBoxes.amountTillDate);
     appendStr("fixed_deposit", investments.fd);
     appendStr("mutual_fund", investments.mutualFund);
     appendStr("others", investments.others);
@@ -1314,6 +1682,21 @@ const CPRForm = ({
     appendStr("school_progress_report_sent", schoolProgressSent);
     appendStr("school_progress_report_sent_reason", progressRemarks);
     appendStr("monitoring_anchal_name", selectedMonitoringAnchal);
+    appendStr("renewal_members", memberships.renewal?.added);
+    appendStr("new_members", memberships.newMember?.added);
+    appendStr("renewal_members_till_date", memberships.renewal?.tillDate);
+    appendStr("new_members_till_date", memberships.newMember?.tillDate);
+
+    // Section D: Donations (recorded separately for CSR, Non-CSR, and General)
+    appendStr("general_donation_donors", donations.general?.donors);
+    appendStr("general_donation_during", donations.general?.during);
+    appendStr("general_donation_till", donations.general?.till);
+    appendStr("csr_donation_donors", donations.csr?.donors);
+    appendStr("csr_donation_during", donations.csr?.during);
+    appendStr("csr_donation_till", donations.csr?.till);
+    appendStr("non_csr_donation_donors", donations.nonCsr?.donors ?? donations.other?.donors);
+    appendStr("non_csr_donation_during", donations.nonCsr?.during ?? donations.other?.during);
+    appendStr("non_csr_donation_till", donations.nonCsr?.till ?? donations.other?.till);
 
     if (signedFile instanceof File) {
       fd.append("signed_cpr", signedFile);
@@ -1321,6 +1704,15 @@ const CPRForm = ({
       fd.append("signed_cpr", existingSignedCprUrl);
     } else {
       fd.append("signed_cpr", "");
+    }
+
+    // Original / Raw Excel Data File (Optional for verification & processing)
+    if (rawExcelFile instanceof File) {
+      fd.append("raw_excel_file", rawExcelFile);
+      fd.append("raw_excel", rawExcelFile);
+    } else if (existingRawExcelUrl) {
+      fd.append("raw_excel_file", existingRawExcelUrl);
+      fd.append("raw_excel", existingRawExcelUrl);
     }
 
     return fd;
@@ -1477,6 +1869,508 @@ const CPRForm = ({
     }
   };
 
+  // Pre-calculated CRC32 lookup table for fast ZIP patching
+  const CRC32_TABLE = React.useMemo(() => {
+    const table = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) {
+        c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      }
+      table[n] = c;
+    }
+    return table;
+  }, []);
+
+  const calcZipCrc32 = (u8) => {
+    let crc = 0 ^ -1;
+    for (let i = 0; i < u8.length; i++) {
+      crc = (crc >>> 8) ^ CRC32_TABLE[(crc ^ u8[i]) & 0xff];
+    }
+    return (crc ^ -1) >>> 0;
+  };
+
+  // Enables Excel "Wrap Text" automatically for ALL cells across the entire workbook
+  const enableWorkbookWrapText = (u8Array) => {
+    try {
+      const u8 = new Uint8Array(u8Array);
+      const view = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+
+      const findBytes = (needle, from = 0) => {
+        for (let i = from; i <= u8.length - needle.length; i++) {
+          let match = true;
+          for (let j = 0; j < needle.length; j++) {
+            if (u8[i + j] !== needle[j]) {
+              match = false;
+              break;
+            }
+          }
+          if (match) return i;
+        }
+        return -1;
+      };
+
+      const pkLocal = [0x50, 0x4b, 0x03, 0x04];
+      const pkCD = [0x50, 0x4b, 0x01, 0x02];
+      const stylesBytes = Array.from("xl/styles.xml").map((c) => c.charCodeAt(0));
+
+      let pos = 0;
+      let localPos = -1,
+        localDataStart = -1,
+        localDataLen = -1;
+      while ((pos = findBytes(pkLocal, pos)) !== -1) {
+        const fnLen = view.getUint16(pos + 26, true);
+        const extraLen = view.getUint16(pos + 28, true);
+        let isStyles = fnLen === stylesBytes.length;
+        if (isStyles) {
+          for (let k = 0; k < fnLen; k++) {
+            if (u8[pos + 30 + k] !== stylesBytes[k]) {
+              isStyles = false;
+              break;
+            }
+          }
+        }
+        if (isStyles) {
+          localPos = pos;
+          localDataLen = view.getUint32(pos + 18, true);
+          localDataStart = pos + 30 + fnLen + extraLen;
+          break;
+        }
+        pos += 4;
+      }
+
+      if (localPos === -1) return u8;
+
+      const decoder = new TextDecoder("utf-8");
+      const encoder = new TextEncoder();
+      const origXml = decoder.decode(
+        u8.subarray(localDataStart, localDataStart + localDataLen)
+      );
+
+      const target =
+        '<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs>';
+      const replacement =
+        '<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment wrapText="1" vertical="center"/></xf></cellXfs>';
+
+      if (!origXml.includes(target)) return u8;
+
+      // Shorten dummy xmlns:vt attribute by 44 chars to keep exact same byte length
+      const vtAttr =
+        ' xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"';
+      const shortenedVt = " ".repeat(vtAttr.length - 44);
+      const newXml = origXml
+        .replace(target, replacement)
+        .replace(vtAttr, shortenedVt);
+
+      if (newXml.length !== origXml.length) return u8;
+
+      const newXmlBytes = encoder.encode(newXml);
+      u8.set(newXmlBytes, localDataStart);
+
+      const newCrc = calcZipCrc32(newXmlBytes);
+      view.setUint32(localPos + 14, newCrc, true);
+
+      // Update Central Directory entry
+      pos = 0;
+      while ((pos = findBytes(pkCD, pos)) !== -1) {
+        const fnLen = view.getUint16(pos + 28, true);
+        let isStyles = fnLen === stylesBytes.length;
+        if (isStyles) {
+          for (let k = 0; k < fnLen; k++) {
+            if (u8[pos + 46 + k] !== stylesBytes[k]) {
+              isStyles = false;
+              break;
+            }
+          }
+        }
+        if (isStyles) {
+          view.setUint32(pos + 16, newCrc, true);
+          break;
+        }
+        pos += 4;
+      }
+
+      return u8;
+    } catch (err) {
+      console.warn("Could not patch wrapText in XLSX, falling back to raw", err);
+      return u8Array;
+    }
+  };
+
+  const handleDownloadExcel = () => {
+    try {
+      setIsGeneratingExcel(true);
+      const toastId = toast.loading("Generating CPR Excel (.xlsx)...");
+
+      const rows = [];
+
+      // 1. Meta / Header
+      rows.push(["CHAPTER PERFORMANCE REPORT (CPR)", "", "", "", "", ""]);
+      rows.push(["Chapter Name:", chapterName || "", "", "Financial\nYear:", financialYear || "", ""]);
+      rows.push(["Financial Month:", monthName || "", "", "Submission\nDate:", submissionDate || "", ""]);
+      rows.push(["Name of CPP:", cppName || "", "", "Report\nStatus:", csrStatus || "Draft", ""]);
+      rows.push([""]);
+
+      // 2. Section A: Membership Data
+      rows.push(["A | MEMBERSHIP DATA", "", "", "", "", ""]);
+      rows.push([
+        "Particulars",
+        "Members as\non 31st March",
+        "Membership\nAdded During\nMonth",
+        "Membership\nTill Date",
+        "Cumulative\nMembership",
+        "Membership Amount\nReceived (Rs.) @ Rs.\n1,000",
+      ]);
+
+      const startRowSecA = rows.length + 1; // 1-based index in Excel
+      const mChapter = memberships.chapter || {};
+      const mYuva = memberships.yuva || {};
+      const mMahila = memberships.mahila || {};
+      const mRenewal = memberships.renewal || {};
+      const mNew = memberships.newMember || {};
+
+      rows.push([
+        "Chapter",
+        Number(mChapter.asOnMarch || mChapter.march) || 0,
+        Number(mChapter.added) || 0,
+        Number(mChapter.tillDate) || 0,
+        Number(mChapter.cumulative) || 0,
+        Number(mChapter.amount) || 0,
+      ]);
+      rows.push([
+        "FTS Yuva",
+        Number(mYuva.asOnMarch || mYuva.march) || 0,
+        Number(mYuva.added) || 0,
+        Number(mYuva.tillDate) || 0,
+        Number(mYuva.cumulative) || 0,
+        Number(mYuva.amount) || 0,
+      ]);
+      rows.push([
+        "Mahila Samiti",
+        Number(mMahila.asOnMarch || mMahila.march) || 0,
+        Number(mMahila.added) || 0,
+        Number(mMahila.tillDate) || 0,
+        Number(mMahila.cumulative) || 0,
+        Number(mMahila.amount) || 0,
+      ]);
+      rows.push([
+        "Renewal Members",
+        "",
+        Number(mRenewal.added) || 0,
+        Number(mRenewal.tillDate) || 0,
+        Number(mRenewal.cumulative) || 0,
+        Number(mRenewal.amount) || 0,
+      ]);
+      rows.push([
+        "New Members",
+        "",
+        Number(mNew.added) || 0,
+        Number(mNew.tillDate) || 0,
+        Number(mNew.cumulative) || 0,
+        Number(mNew.amount) || 0,
+      ]);
+
+      const endRowSecA = rows.length;
+      // Total row with Excel SUM formulas
+      rows.push([
+        "TOTAL",
+        { f: `SUM(B${startRowSecA}:B${startRowSecA + 2})` },
+        { f: `SUM(C${startRowSecA}:C${endRowSecA})` },
+        { f: `SUM(D${startRowSecA}:D${endRowSecA})` },
+        { f: `SUM(E${startRowSecA}:E${endRowSecA})` },
+        { f: `SUM(F${startRowSecA}:F${endRowSecA})` },
+      ]);
+      rows.push([""]);
+
+      // 3. Section B: Executive Committee Meetings
+      rows.push(["B | EXECUTIVE COMMITTEE MEETING DETAILS", "", "", "", "", ""]);
+      if (noMeetingHeld || meetings.length === 0) {
+        rows.push(["No Executive Committee Meeting was held this month.", "", "", "", "", ""]);
+      } else {
+        rows.push([
+          "Meeting\nDate",
+          "Meeting\nType",
+          "Total Committee\nMembers",
+          "Members\nInvited",
+          "Members\nAttended",
+          "Agenda / Discussion\nSummary",
+        ]);
+        meetings.forEach((m) => {
+          rows.push([
+            m.date || "",
+            m.type || "Executive Committee Meeting",
+            Number(m.membersCount) || 0,
+            Number(m.invited) || 0,
+            Number(m.attended) || 0,
+            m.agenda || "",
+          ]);
+        });
+      }
+      rows.push([""]);
+
+      // 4. Section C: OTS Details & Collection
+      rows.push(["C | OTS DETAILS & COLLECTION", "", "", "", "", ""]);
+      rows.push(["OTS PRP:", otsPRP || "0", "", "", "", ""]);
+      rows.push(["Particulars", "During the\nMonth", "Till\nDate", "", "", ""]);
+      const otsCountRow = rows.length + 1;
+      rows.push(["Total Number of OTS", Number(otsCountDuringMonth) || 0, Number(otsCountTillDate) || 0]);
+      const otsRegRow = rows.length + 1;
+      rows.push([
+        "Regular OTS Collection (Rs.)\n@ Rs. 30,000 per OTS",
+        { f: `B${otsCountRow}*30000` },
+        { f: `C${otsCountRow}*30000` },
+      ]);
+      const otsExtraRow = rows.length + 1;
+      rows.push([
+        "Extra OTS Collection\n(Additional Amount) (Rs.)",
+        Number(otsExtraDuring) || 0,
+        Number(otsExtraTill) || 0,
+      ]);
+      rows.push([
+        "Total OTS Amount Collected (Rs.)",
+        { f: `SUM(B${otsRegRow}:B${otsExtraRow})` },
+        { f: `SUM(C${otsRegRow}:C${otsExtraRow})` },
+      ]);
+      rows.push([""]);
+
+      // 5. Section D: Donation & CSR Details
+      rows.push(["D | DONATION & CSR DETAILS", "", "", "", "", ""]);
+      rows.push(["Particulars", "Number of\nDonors", "During the\nMonth (Rs.)", "Till Date\n(Rs.)", "", ""]);
+      const startDonRow = rows.length + 1;
+      const nonCsrObj = donations.nonCsr || donations.other || {};
+      rows.push([
+        "General Donation",
+        Number(donations.general?.donors) || 0,
+        Number(donations.general?.during) || 0,
+        Number(donations.general?.till) || 0,
+      ]);
+      rows.push([
+        "CSR Donation",
+        Number(donations.csr?.donors) || 0,
+        Number(donations.csr?.during) || 0,
+        Number(donations.csr?.till) || 0,
+      ]);
+      rows.push([
+        "Non-CSR Donation",
+        Number(nonCsrObj.donors) || 0,
+        Number(nonCsrObj.during) || 0,
+        Number(nonCsrObj.till) || 0,
+      ]);
+      const endDonRow = rows.length;
+      rows.push([
+        "TOTAL Donation",
+        { f: `SUM(B${startDonRow}:B${endDonRow})` },
+        { f: `SUM(C${startDonRow}:C${endDonRow})` },
+        { f: `SUM(D${startDonRow}:D${endDonRow})` },
+      ]);
+      rows.push([""]);
+
+      // 6. Section E: Collection Boxes
+      rows.push(["E | COLLECTION BOXES", "", "", "", "", ""]);
+      rows.push(["Particulars", "This\nMonth", "Till\nDate", "", "", ""]);
+      rows.push([
+        "Boxes Placed",
+        Number(collectionBoxes.boxesThisMonth) || 0,
+        Number(collectionBoxes.boxesTillDate) || 0,
+      ]);
+      rows.push([
+        "Amount Collected (Rs.)",
+        Number(collectionBoxes.amountThisMonth) || 0,
+        Number(collectionBoxes.amountTillDate) || 0,
+      ]);
+      rows.push([""]);
+
+      // 7. Section F: Investment (As on Date)
+      rows.push(["F | INVESTMENT (AS ON DATE)", "", "", "", "", ""]);
+      rows.push(["Investment Type", "Amount\n(Rs.)", "", "", "", ""]);
+      const startInvRow = rows.length + 1;
+      rows.push(["Fixed Deposit", Number(investments.fd) || 0]);
+      rows.push(["Mutual Fund", Number(investments.mutualFund) || 0]);
+      rows.push(["Others (" + (investments.othersSpecify || "Specify") + ")", Number(investments.others) || 0]);
+      const endInvRow = rows.length;
+      rows.push(["TOTAL Investment", { f: `SUM(B${startInvRow}:B${endInvRow})` }]);
+      rows.push([""]);
+
+      // 8. Section G: Cash & Bank Balance
+      rows.push(["G | CASH & BANK BALANCE", "", "", "", "", ""]);
+      rows.push(["Account / Bank Name", "Balance\n(Rs.)", "", "", "", ""]);
+      const startBankRow = rows.length + 1;
+      rows.push(["Cash in Hand", Number(cashInHand) || 0]);
+      if (bankBalances.length > 0) {
+        bankBalances.forEach((b) => {
+          rows.push([b.bankName || "Bank", Number(b.balance) || 0]);
+        });
+      }
+      const endBankRow = rows.length;
+      rows.push(["TOTAL Cash & Bank Balance", { f: `SUM(B${startBankRow}:B${endBankRow})` }]);
+      rows.push([""]);
+
+      // 9. Section H: Van Yatra
+      rows.push(["H | VAN YATRA DURING THE MONTH", "", "", "", "", ""]);
+      if (vanyatras.length === 0) {
+        rows.push(["No Van Yatra held during the month.", "", "", "", "", ""]);
+      } else {
+        rows.push(["Date", "Place\nVisited", "Village\nName", "No. of\nPersons", "Name of\nVisitors"]);
+        vanyatras.forEach((y) => {
+          rows.push([
+            y.date || "",
+            y.place || "",
+            y.village || "",
+            Number(y.persons) || 0,
+            y.visitors || "",
+          ]);
+        });
+      }
+      rows.push([""]);
+
+      // 10. Section I: Events During the Month
+      rows.push(["I | EVENTS DURING THE MONTH", "", "", "", "", ""]);
+      if (events.length === 0) {
+        rows.push(["No Events conducted during the month.", "", "", "", "", ""]);
+      } else {
+        rows.push(["Event Name", "Event Date", "Event Description", "", "", ""]);
+        events.forEach((ev) => {
+          rows.push([ev.name || "", ev.date || "", ev.description || "", "", "", ""]);
+        });
+      }
+      rows.push([""]);
+
+      // 11. Section J: Annexure 1 - Disbursement to Anchal
+      rows.push(["J | ANNEXURE 1 – DISBURSEMENT TO ANCHAL", "", "", "", "", ""]);
+      rows.push([
+        "Anchal Name",
+        "No. of Acharyas\nPaid",
+        "Remittance Till\nLast Month (Rs.)",
+        "Remittance This\nMonth (Rs.)",
+        "Total Remittance\n(Rs.)",
+      ]);
+      const startAnchalRow = rows.length + 1;
+      if (anchals.length > 0) {
+        anchals.forEach((a, idx) => {
+          const rIdx = startAnchalRow + idx;
+          rows.push([
+            a.anchalName || `Anchal ${idx + 1}`,
+            Number(a.acharyasPaid) || 0,
+            Number(a.remittanceLastMonth) || 0,
+            Number(a.remittanceThisMonth) || 0,
+            { f: `SUM(C${rIdx}:D${rIdx})` },
+          ]);
+        });
+      }
+      const endAnchalRow = rows.length;
+      if (anchals.length > 0) {
+        rows.push([
+          "TOTAL",
+          { f: `SUM(B${startAnchalRow}:B${endAnchalRow})` },
+          { f: `SUM(C${startAnchalRow}:C${endAnchalRow})` },
+          { f: `SUM(D${startAnchalRow}:D${endAnchalRow})` },
+          { f: `SUM(E${startAnchalRow}:E${endAnchalRow})` },
+        ]);
+      }
+      rows.push([""]);
+
+      // 12. Section K: Annexure 2 - Monthly Summary / Controls
+      rows.push(["K | ANNEXURE 2 – MONTHLY SUMMARY", "", "", "", "", ""]);
+      rows.push(["Particulars", "Status /\nCount", "Remarks /\nDetails", "", "", ""]);
+      rows.push(["Samagri reached to schools?", samagriReached || "No", samagriRemarks || ""]);
+      rows.push([
+        "Non-CSR Donor Board reached all schools?",
+        `Total: ${donorBoard.nonCsr?.total || 0}, Sent: ${donorBoard.nonCsr?.sent || 0}`,
+        donorBoard.nonCsr?.remarks || "",
+      ]);
+      rows.push([
+        "CSR Donor Board reached all schools?",
+        `Total: ${donorBoard.csr?.total || 0}, Sent: ${donorBoard.csr?.sent || 0}`,
+        donorBoard.csr?.remarks || "",
+      ]);
+      rows.push(["School Progress Report sent to Donors?", schoolProgressSent || "No", progressRemarks || ""]);
+      rows.push(["Monitoring Anchal Name", selectedMonitoringAnchal || "None", ""]);
+
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+
+      // Exact column widths & proportions matching the required CPR template layout
+      ws["!cols"] = [
+        { wch: 32 }, // Col A: Particulars & categories
+        { wch: 16 }, // Col B: Members as on 31st March / Month counts
+        { wch: 16 }, // Col C: Membership Added During Month
+        { wch: 16 }, // Col D: Membership Till Date
+        { wch: 16 }, // Col E: Cumulative Membership
+        { wch: 23 }, // Col F: Membership Amount Received (Rs.) @ Rs. 1,000
+        { wch: 20 }, // Col G
+        { wch: 20 }, // Col H
+        { wch: 20 }, // Col I
+        { wch: 20 }, // Col J
+      ];
+
+      // Row heights to accommodate wrapped headers (2 lines = 28pt, 3 lines = 45pt)
+      ws["!rows"] = rows.map((row) => {
+        if (!Array.isArray(row) || row.length === 0) return { hpt: 15 };
+        let maxLines = 1;
+        row.forEach((cell) => {
+          const val =
+            typeof cell === "object" && cell && cell.v !== undefined
+              ? cell.v
+              : cell;
+          if (typeof val === "string") {
+            const lines = val.split("\n").length;
+            if (lines > maxLines) maxLines = lines;
+          }
+        });
+        if (maxLines >= 3) return { hpt: 45 };
+        if (maxLines === 2) return { hpt: 28 };
+        return { hpt: 20 };
+      });
+
+      // Enable Wrap Text, vertical centering, and number alignment on all cells
+      for (const cellAddr in ws) {
+        if (cellAddr.startsWith("!")) continue;
+        const cell = ws[cellAddr];
+        if (!cell) continue;
+
+        const isString = typeof cell.v === "string";
+        const hasNewline = isString && cell.v.includes("\n");
+        const isNumber = typeof cell.v === "number" || (cell.f && !hasNewline);
+
+        cell.s = {
+          alignment: {
+            wrapText: true,
+            vertical: "center",
+            horizontal: isNumber ? "right" : hasNewline ? "center" : "left",
+          },
+        };
+      }
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "CPR Report");
+
+      const cleanFileName = `CPR_Report_${chapterName ? chapterName.replace(/[^a-zA-Z0-9]/g, "_") : "Chapter"}_${monthName || "Month"}_${financialYear || "FY"}.xlsx`;
+
+      // Export workbook with Wrap Text automatically enabled on ALL cells in the Excel file
+      const rawBytes = XLSX.write(wb, { type: "array", bookType: "xlsx" });
+      const finalBytes = enableWorkbookWrapText(rawBytes);
+
+      const blob = new Blob([finalBytes], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const downloadUrl = URL.createObjectURL(blob);
+      const downloadLink = document.createElement("a");
+      downloadLink.href = downloadUrl;
+      downloadLink.download = cleanFileName;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+      URL.revokeObjectURL(downloadUrl);
+
+      toast.dismiss(toastId);
+      toast.success("CPR Excel (.xlsx) downloaded successfully!");
+    } catch (err) {
+      console.error("Excel download error:", err);
+      toast.error("Failed to generate CPR Excel");
+    } finally {
+      setIsGeneratingExcel(false);
+    }
+  };
+
   const handleResetForm = () => {
     // Header
     setChapterName("");
@@ -1491,9 +2385,11 @@ const CPRForm = ({
 
     // Section A
     setMemberships({
-      chapter: { asOnMarch: "", added: "" },
-      yuva: { asOnMarch: "", added: "" },
-      mahila: { asOnMarch: "", added: "" },
+      chapter: { asOnMarch: "", added: "", tillDate: "" },
+      yuva: { asOnMarch: "", added: "", tillDate: "" },
+      mahila: { asOnMarch: "", added: "", tillDate: "" },
+      renewal: { asOnMarch: "", added: "", tillDate: "" },
+      newMember: { asOnMarch: "", added: "", tillDate: "" },
     });
 
     // Section B
@@ -1511,12 +2407,18 @@ const CPRForm = ({
     // Section C
     setOtsPRP("");
     setOtsCountDuringMonth("");
+    setOtsCountTillDateInput("");
+    setOtsTotalAmountDuringMonth("");
+    setOtsTotalAmountTillDate("");
+    setOtsExtraAmountDuringMonth("");
+    setOtsExtraAmountTillDate("");
 
     // Section D
     setDonations({
-      general: { during: "", till: "" },
-      csr: { during: "", till: "" },
-      other: { during: "", till: "" },
+      general: { donors: "", during: "", till: "" },
+      csr: { donors: "", during: "", till: "" },
+      nonCsr: { donors: "", during: "", till: "" },
+      other: { donors: "", during: "", till: "" },
     });
 
     // Section E
@@ -1583,8 +2485,12 @@ const CPRForm = ({
 
     // Uploaded file
     setSignedFile(null);
+    setRawExcelFile(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
+    }
+    if (rawExcelInputRef.current) {
+      rawExcelInputRef.current.value = "";
     }
 
     scrollToSection("section-report-details");
@@ -1668,7 +2574,7 @@ const CPRForm = ({
       setCsrStatus("Submitted");
       toast.success(
         response.data?.message ||
-          "Chapter Performance Report submitted successfully!"
+        "Chapter Performance Report submitted successfully!"
       );
 
       // No PDF download while submitting (per user request)
@@ -1682,8 +2588,8 @@ const CPRForm = ({
       console.error("Submit CPR error:", err);
       toast.error(
         err?.response?.data?.message ||
-          err?.message ||
-          "Failed to submit CPR report"
+        err?.message ||
+        "Failed to submit CPR report"
       );
     } finally {
       setIsSubmitting(false);
@@ -1693,8 +2599,27 @@ const CPRForm = ({
   const handleFileUpload = (e) => {
     const file = e.target.files?.[0];
     if (file) {
+      const ext = file.name.split(".").pop().toLowerCase();
+      const validExts = ["pdf", "xlsx", "xls", "png", "jpg", "jpeg", "webp"];
+      if (!validExts.includes(ext)) {
+        toast.error("Please upload a PDF, Excel (.xlsx/.xls), or image file");
+        return;
+      }
       setSignedFile(file);
-      toast.success(`Uploaded: ${file.name}`);
+      toast.success(`Signed document "${file.name}" selected`);
+    }
+  };
+
+  const handleRawExcelUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const ext = file.name.split(".").pop().toLowerCase();
+      if (!["xlsx", "xls", "csv"].includes(ext)) {
+        toast.error("Please upload an Excel spreadsheet file (.xlsx or .xls)");
+        return;
+      }
+      setRawExcelFile(file);
+      toast.success(`Raw Excel file "${file.name}" selected for upload`);
     }
   };
 
@@ -1728,17 +2653,15 @@ const CPRForm = ({
                   key={item.id}
                   onClick={() => scrollToSection(item.id)}
                   type="button"
-                  className={`w-full text-left px-2.5 py-2 rounded flex items-center gap-2 transition-all ${
-                    isActive
+                  className={`w-full text-left px-2.5 py-2 rounded flex items-center gap-2 transition-all ${isActive
                       ? "bg-blue-50 text-blue-700 font-semibold border-l-4 border-blue-600"
                       : "text-slate-600 hover:bg-slate-50"
-                  }`}
+                    }`}
                 >
                   {item.code && (
                     <span
-                      className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                        isActive ? "bg-blue-600 text-white" : "bg-slate-200 text-slate-700"
-                      }`}
+                      className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${isActive ? "bg-blue-600 text-white" : "bg-slate-200 text-slate-700"
+                        }`}
                     >
                       {item.code}
                     </span>
@@ -1783,9 +2706,8 @@ const CPRForm = ({
                   title="Re-fetch and auto-fill report details from getCPRReportDetails API"
                 >
                   <RefreshCw
-                    className={`w-3.5 h-3.5 ${
-                      loadingDetails ? "animate-spin" : ""
-                    }`}
+                    className={`w-3.5 h-3.5 ${loadingDetails ? "animate-spin" : ""
+                      }`}
                   />
                   <span>{loadingDetails ? "Fetching..." : "Refresh Auto-Fill"}</span>
                 </button>
@@ -1840,13 +2762,18 @@ const CPRForm = ({
                 </label>
                 <input
                   type="text"
+                  list="cpr-chapter-options"
                   value={chapterName}
-                  disabled={Boolean(chapterName) || isView}
-                  readOnly={Boolean(chapterName) || isView}
+                  disabled={isView}
                   onChange={(e) => setChapterName(e.target.value)}
-                  className="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed disabled:pointer-events-none"
-                  placeholder="e.g. Kolkata"
+                  className="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed"
+                  placeholder="Select or enter Chapter"
                 />
+                <datalist id="cpr-chapter-options">
+                  {chapterList.map((ch, idx) => (
+                    <option key={idx} value={ch} />
+                  ))}
+                </datalist>
               </div>
 
               {/* For the Month Of */}
@@ -1881,13 +2808,20 @@ const CPRForm = ({
                 </label>
                 <input
                   type="text"
+                  list="cpr-cpp-options"
                   value={cppName}
-                  disabled={Boolean(dbAutoFilled.header && cppName) || isManualFieldDisabled}
-                  readOnly={Boolean(dbAutoFilled.header && cppName) || isManualFieldDisabled}
+                  disabled={isManualFieldDisabled}
                   onChange={(e) => setCppName(e.target.value)}
-                  className="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed disabled:pointer-events-none"
-                  placeholder="Enter CPP name"
+                  className="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed"
+                  placeholder="Select or enter CPP name"
                 />
+                <datalist id="cpr-cpp-options">
+                  <option value="testadmin" />
+                  <option value="President" />
+                  <option value="Secretary" />
+                  <option value="Treasurer" />
+                  {cppName && <option value={cppName} />}
+                </datalist>
               </div>
 
               {/* Submission Date */}
@@ -1907,74 +2841,84 @@ const CPRForm = ({
               </div>
             </div>
 
-            {/* Sub Chapters of this Chapter */}
+            {/* Sub Chapters of this Chapter (Parent-Child Mapping) */}
             {/* <div className="pt-2 border-t border-slate-100">
-              <h3 className="text-xs font-bold text-slate-800 mb-1">
-                Sub Chapters of this Chapter
-              </h3>
+              <div className="flex items-center justify-between mb-1.5">
+                <h3 className="text-xs font-bold text-slate-800">
+                  Sub-Chapters of {chapterName || "this Chapter"}
+                </h3>
+                <span className="text-[11px] text-slate-400">
+                  Mapped to Chapter: <strong>{chapterName || "None"}</strong>
+                </span>
+              </div>
               {subChapters.length === 0 ? (
-                <p className="text-xs text-slate-500 mb-2">No sub chapters entered.</p>
+                <p className="text-xs text-slate-500 mb-2">No sub-chapters mapped to this chapter.</p>
               ) : (
                 <div className="flex flex-wrap gap-2 mb-2">
                   {subChapters.map((sc, i) => (
                     <span
                       key={i}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-100 text-xs font-medium text-slate-700"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-100 border border-slate-200 text-xs font-medium text-slate-700"
                     >
                       {sc}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setSubChapters(subChapters.filter((_, idx) => idx !== i))
-                        }
-                        className="text-slate-400 hover:text-red-500"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
+                      {!isView && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSubChapters(subChapters.filter((_, idx) => idx !== i))
+                          }
+                          className="text-slate-400 hover:text-red-500 transition cursor-pointer"
+                          title="Remove sub-chapter"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
                     </span>
                   ))}
                 </div>
               )}
 
-              {showSubChapterInput ? (
-                <div className="flex items-center gap-2 max-w-sm">
-                  <input
-                    type="text"
-                    value={newSubChapter}
-                    onChange={(e) => setNewSubChapter(e.target.value)}
-                    placeholder="Sub chapter name"
-                    className="flex-1 bg-white border border-slate-300 rounded px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+              {!isView && (
+                showSubChapterInput ? (
+                  <div className="flex items-center gap-2 max-w-sm">
+                    <input
+                      type="text"
+                      value={newSubChapter}
+                      onChange={(e) => setNewSubChapter(e.target.value)}
+                      placeholder="Enter sub-chapter name"
+                      className="flex-1 bg-white border border-slate-300 rounded px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (newSubChapter.trim()) {
+                          setSubChapters([...subChapters, newSubChapter.trim()]);
+                          setNewSubChapter("");
+                          setShowSubChapterInput(false);
+                        }
+                      }}
+                      className="px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700 transition cursor-pointer"
+                    >
+                      Add
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowSubChapterInput(false)}
+                      className="px-2 py-1.5 text-xs text-slate-500 hover:text-slate-700 transition cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
                   <button
                     type="button"
-                    onClick={() => {
-                      if (newSubChapter.trim()) {
-                        setSubChapters([...subChapters, newSubChapter.trim()]);
-                        setNewSubChapter("");
-                        setShowSubChapterInput(false);
-                      }
-                    }}
-                    className="px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700"
+                    onClick={() => setShowSubChapterInput(true)}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded border border-slate-300 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
                   >
-                    Save
+                    <Plus className="w-3.5 h-3.5" />
+                    Add Sub-Chapter
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowSubChapterInput(false)}
-                    className="px-2 py-1.5 text-xs text-slate-500 hover:text-slate-700"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setShowSubChapterInput(true)}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded border border-slate-300 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Add Sub Chapter
-                </button>
+                )
               )}
             </div> */}
           </div>
@@ -1999,179 +2943,122 @@ const CPRForm = ({
                   <thead>
                     <tr className="bg-blue-50 text-slate-800 font-semibold border-b border-slate-200">
                       <th className="p-3 border-r border-slate-200 w-1/4">Particulars</th>
-                      <th className="p-3 border-r border-slate-200 text-center w-1/5">
+                      <th className="p-3 border-r border-slate-200 text-center w-[15%]">
                         Members as on 31st March
                       </th>
-                      <th className="p-3 border-r border-slate-200 text-center w-1/5">
+                      <th className="p-3 border-r border-slate-200 text-center w-[15%]">
                         Membership Added During the Month <span className="text-red-500">*</span>
                       </th>
-                      <th className="p-3 border-r border-slate-200 text-center w-1/5">
-                        Cumulative Membership Till Date
+                      <th className="p-3 border-r border-slate-200 text-center w-[15%]">
+                        Membership Till Date
                       </th>
-                      <th className="p-3 text-right w-1/5">
+                      <th className="p-3 border-r border-slate-200 text-center w-[15%]">
+                        Cumulative Membership
+                      </th>
+                      <th className="p-3 text-right w-[16%]">
                         Membership Amount Received (₹) @ ₹1,000 per member
                       </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {/* Chapter */}
-                    <tr className="border-b border-slate-100 hover:bg-slate-50/60">
-                      <td className="p-3 font-semibold text-slate-800 border-r border-slate-200">
-                        Chapter
-                      </td>
-                      <td className="p-2 border-r border-slate-200">
-                        <input
-                          type="number"
-                          value={memberships?.chapter?.asOnMarch ?? ""}
-                          disabled={Boolean(dbAutoFilled.membership) || isView}
-                          readOnly={Boolean(dbAutoFilled.membership) || isView}
-                          onChange={(e) =>
-                            setMemberships({
-                              ...memberships,
-                              chapter: {
-                                ...memberships.chapter,
-                                asOnMarch: e.target.value,
-                              },
-                            })
-                          }
-                          className="w-full text-right px-2 py-1.5 border border-slate-300 rounded bg-white text-xs font-medium focus:ring-1 focus:ring-blue-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed disabled:pointer-events-none"
-                        />
-                      </td>
-                      <td className="p-2 border-r border-slate-200">
-                        <input
-                          type="number"
-                          value={memberships?.chapter?.added ?? ""}
-                          disabled={Boolean(dbAutoFilled.membership) || isView}
-                          readOnly={Boolean(dbAutoFilled.membership) || isView}
-                          onChange={(e) =>
-                            setMemberships({
-                              ...memberships,
-                              chapter: {
-                                ...memberships.chapter,
-                                added: e.target.value,
-                              },
-                            })
-                          }
-                          className="w-full text-right px-2 py-1.5 border border-slate-300 rounded bg-white text-xs font-medium focus:ring-1 focus:ring-blue-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed disabled:pointer-events-none"
-                        />
-                      </td>
-                      <td className="p-2 border-r border-slate-200">
-                        <div className="w-full text-right px-2 py-1.5 rounded border border-dashed border-blue-300 bg-blue-50/50 text-blue-900 font-semibold text-xs">
-                          {memberships?.chapter?.added !== "" ? memberships?.chapter?.added : ""}
-                        </div>
-                      </td>
-                      <td className="p-2">
-                        <div className="w-full text-right px-2 py-1.5 rounded border border-dashed border-blue-300 bg-blue-50/50 text-blue-900 font-semibold text-xs">
-                          {memberships?.chapter?.added !== ""
-                            ? formatINR(Number(memberships?.chapter?.added) * 1000)
-                            : ""}
-                        </div>
-                      </td>
-                    </tr>
+                    {[
+                      { key: "chapter", label: "Chapter" },
+                      { key: "yuva", label: "FTS Yuva" },
+                      { key: "mahila", label: "Mahila Samiti" },
+                      { key: "renewal", label: "Renewal Members" },
+                      { key: "newMember", label: "New Members" },
+                    ].map(({ key, label }, idx) => {
+                      const rowData = memberships?.[key] || {};
+                      const rowTillDateNum = Number(
+                        rowData.tillDate !== undefined && rowData.tillDate !== ""
+                          ? rowData.tillDate
+                          : rowData.added
+                      ) || 0;
+                      const rowCumulative = (Number(rowData.asOnMarch) || 0) + rowTillDateNum;
+                      const rowAmount = rowTillDateNum * 1000;
 
-                    {/* FTS Yuva */}
-                    <tr className="border-b border-slate-100 hover:bg-slate-50/60">
-                      <td className="p-3 font-semibold text-slate-800 border-r border-slate-200">
-                        FTS Yuva
-                      </td>
-                      <td className="p-2 border-r border-slate-200">
-                        <input
-                          type="number"
-                          value={memberships?.yuva?.asOnMarch ?? ""}
-                          disabled={Boolean(dbAutoFilled.membership) || isView}
-                          readOnly={Boolean(dbAutoFilled.membership) || isView}
-                          onChange={(e) =>
-                            setMemberships({
-                              ...memberships,
-                              yuva: { ...memberships.yuva, asOnMarch: e.target.value },
-                            })
-                          }
-                          className="w-full text-right px-2 py-1.5 border border-slate-300 rounded bg-white text-xs font-medium focus:ring-1 focus:ring-blue-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed disabled:pointer-events-none"
-                        />
-                      </td>
-                      <td className="p-2 border-r border-slate-200">
-                        <input
-                          type="number"
-                          value={memberships?.yuva?.added ?? ""}
-                          disabled={Boolean(dbAutoFilled.membership) || isView}
-                          readOnly={Boolean(dbAutoFilled.membership) || isView}
-                          onChange={(e) =>
-                            setMemberships({
-                              ...memberships,
-                              yuva: { ...memberships.yuva, added: e.target.value },
-                            })
-                          }
-                          className="w-full text-right px-2 py-1.5 border border-slate-300 rounded bg-white text-xs font-medium focus:ring-1 focus:ring-blue-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed disabled:pointer-events-none"
-                        />
-                      </td>
-                      <td className="p-2 border-r border-slate-200">
-                        <div className="w-full text-right px-2 py-1.5 rounded border border-dashed border-blue-300 bg-blue-50/50 text-blue-900 font-semibold text-xs">
-                          {memberships?.yuva?.added !== "" ? memberships?.yuva?.added : ""}
-                        </div>
-                      </td>
-                      <td className="p-2">
-                        <div className="w-full text-right px-2 py-1.5 rounded border border-dashed border-blue-300 bg-blue-50/50 text-blue-900 font-semibold text-xs">
-                          {memberships?.yuva?.added !== ""
-                            ? formatINR(Number(memberships?.yuva?.added) * 1000)
-                            : ""}
-                        </div>
-                      </td>
-                    </tr>
+                      return (
+                        <tr
+                          key={key}
+                          className={`border-b border-slate-100 hover:bg-slate-50/60 ${key === "renewal" || key === "newMember" ? "bg-blue-50/20" : ""
+                            }`}
+                        >
+                          <td className="p-3 font-semibold text-slate-800 border-r border-slate-200">
+                            {label}
+                          </td>
+                          <td className="p-2 border-r border-slate-200">
+                            {key === "renewal" || key === "newMember" ? (
+                              <div className="w-full text-center text-slate-400 font-medium text-xs">
 
-                    {/* Mahila Samiti */}
-                    <tr className="border-b border-slate-200 hover:bg-slate-50/60">
-                      <td className="p-3 font-semibold text-slate-800 border-r border-slate-200">
-                        Mahila Samiti
-                      </td>
-                      <td className="p-2 border-r border-slate-200">
-                        <input
-                          type="number"
-                          value={memberships?.mahila?.asOnMarch ?? ""}
-                          disabled={Boolean(dbAutoFilled.membership) || isView}
-                          readOnly={Boolean(dbAutoFilled.membership) || isView}
-                          onChange={(e) =>
-                            setMemberships({
-                              ...memberships,
-                              mahila: {
-                                ...memberships.mahila,
-                                asOnMarch: e.target.value,
-                              },
-                            })
-                          }
-                          className="w-full text-right px-2 py-1.5 border border-slate-300 rounded bg-white text-xs font-medium focus:ring-1 focus:ring-blue-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed disabled:pointer-events-none"
-                        />
-                      </td>
-                      <td className="p-2 border-r border-slate-200">
-                        <input
-                          type="number"
-                          value={memberships?.mahila?.added ?? ""}
-                          disabled={Boolean(dbAutoFilled.membership) || isView}
-                          readOnly={Boolean(dbAutoFilled.membership) || isView}
-                          onChange={(e) =>
-                            setMemberships({
-                              ...memberships,
-                              mahila: {
-                                ...memberships.mahila,
-                                added: e.target.value,
-                              },
-                            })
-                          }
-                          className="w-full text-right px-2 py-1.5 border border-slate-300 rounded bg-white text-xs font-medium focus:ring-1 focus:ring-blue-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed disabled:pointer-events-none"
-                        />
-                      </td>
-                      <td className="p-2 border-r border-slate-200">
-                        <div className="w-full text-right px-2 py-1.5 rounded border border-dashed border-blue-300 bg-blue-50/50 text-blue-900 font-semibold text-xs">
-                          {memberships.mahila.added !== "" ? memberships.mahila.added : ""}
-                        </div>
-                      </td>
-                      <td className="p-2">
-                        <div className="w-full text-right px-2 py-1.5 rounded border border-dashed border-blue-300 bg-blue-50/50 text-blue-900 font-semibold text-xs">
-                          {memberships.mahila.added !== ""
-                            ? formatINR(Number(memberships.mahila.added) * 1000)
-                            : ""}
-                        </div>
-                      </td>
-                    </tr>
+                              </div>
+                            ) : (
+                              <input
+                                type="number"
+                                value={rowData.asOnMarch ?? ""}
+                                disabled={Boolean(dbAutoFilled.membership) || isView}
+                                readOnly={Boolean(dbAutoFilled.membership) || isView}
+                                onChange={(e) =>
+                                  setMemberships({
+                                    ...memberships,
+                                    [key]: {
+                                      ...rowData,
+                                      asOnMarch: e.target.value,
+                                    },
+                                  })
+                                }
+                                className="w-full text-right px-2 py-1.5 border border-slate-300 rounded bg-white text-xs font-medium focus:ring-1 focus:ring-blue-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed disabled:pointer-events-none"
+                              />
+                            )}
+                          </td>
+                          <td className="p-2 border-r border-slate-200">
+                            <input
+                              type="number"
+                              value={rowData.added ?? ""}
+                              disabled={Boolean(dbAutoFilled.membership) || isView}
+                              readOnly={Boolean(dbAutoFilled.membership) || isView}
+                              onChange={(e) =>
+                                setMemberships({
+                                  ...memberships,
+                                  [key]: {
+                                    ...rowData,
+                                    added: e.target.value,
+                                  },
+                                })
+                              }
+                              className="w-full text-right px-2 py-1.5 border border-slate-300 rounded bg-white text-xs font-medium focus:ring-1 focus:ring-blue-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed disabled:pointer-events-none"
+                            />
+                          </td>
+                          <td className="p-2 border-r border-slate-200">
+                            <input
+                              type="number"
+                              value={rowData.tillDate ?? ""}
+                              disabled={Boolean(dbAutoFilled.membership) || isView}
+                              readOnly={Boolean(dbAutoFilled.membership) || isView}
+                              onChange={(e) =>
+                                setMemberships({
+                                  ...memberships,
+                                  [key]: {
+                                    ...rowData,
+                                    tillDate: e.target.value,
+                                  },
+                                })
+                              }
+                              className="w-full text-right px-2 py-1.5 border border-slate-300 rounded bg-white text-xs font-medium focus:ring-1 focus:ring-blue-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed disabled:pointer-events-none"
+                            />
+                          </td>
+                          <td className="p-2 border-r border-slate-200">
+                            <div className="w-full text-right px-2 py-1.5 rounded border border-dashed border-blue-300 bg-blue-50/50 text-blue-900 font-semibold text-xs">
+                              {rowCumulative || ""}
+                            </div>
+                          </td>
+                          <td className="p-2">
+                            <div className="w-full text-right px-2 py-1.5 rounded border border-dashed border-blue-300 bg-blue-50/50 text-blue-900 font-semibold text-xs">
+                              {rowAmount > 0 ? formatINR(rowAmount) : ""}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
 
                     {/* TOTAL */}
                     <tr className="bg-slate-50 font-bold border-t-2 border-slate-300">
@@ -2184,6 +3071,11 @@ const CPRForm = ({
                       <td className="p-2 border-r border-slate-200">
                         <div className="w-full text-right px-2 py-1.5 rounded border border-dashed border-blue-300 bg-blue-50/60 text-blue-950 font-bold text-xs">
                           {sectionATotals.added || ""}
+                        </div>
+                      </td>
+                      <td className="p-2 border-r border-slate-200">
+                        <div className="w-full text-right px-2 py-1.5 rounded border border-dashed border-blue-300 bg-blue-50/60 text-blue-950 font-bold text-xs">
+                          {sectionATotals.tillDate || ""}
                         </div>
                       </td>
                       <td className="p-2 border-r border-slate-200">
@@ -2240,9 +3132,8 @@ const CPRForm = ({
                       {meetings.map((m, idx) => (
                         <div
                           key={m.id || idx}
-                          className={`border rounded-md p-4 space-y-4 ${
-                            m.isFromDb ? "border-emerald-200 bg-slate-50/70" : "border-slate-300 bg-white"
-                          }`}
+                          className={`border rounded-md p-4 space-y-4 ${m.isFromDb ? "border-emerald-200 bg-slate-50/70" : "border-slate-300 bg-white"
+                            }`}
                         >
                           <div className="flex items-center justify-between border-b border-slate-200 pb-2">
                             <div className="flex items-center gap-2">
@@ -2501,6 +3392,7 @@ const CPRForm = ({
                       </tr>
                     </thead>
                     <tbody>
+                      {/* Total Number of OTS */}
                       <tr className="border-b border-slate-100">
                         <td className="p-3 font-semibold text-slate-800 border-r border-slate-200">
                           Total Number of OTS
@@ -2508,35 +3400,99 @@ const CPRForm = ({
                         <td className="p-2 border-r border-slate-200">
                           <input
                             type="number"
+                            placeholder="Count"
                             value={otsCountDuringMonth ?? ""}
                             disabled={Boolean(dbAutoFilled.ots) || isView}
                             readOnly={Boolean(dbAutoFilled.ots) || isView}
-                            onChange={(e) => {
-                              setOtsCountDuringMonth(e.target.value);
-                              setOtsAmountOverride(null);
-                            }}
+                            onChange={(e) => handleOtsCountDuringChange(e.target.value)}
                             className="w-full text-right px-2 py-1.5 border border-slate-300 rounded bg-white text-xs font-medium focus:ring-1 focus:ring-orange-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed disabled:pointer-events-none"
                           />
                         </td>
                         <td className="p-2">
-                          <div className="w-full text-right px-2 py-1.5 rounded border border-dashed border-orange-300 bg-orange-50/40 text-orange-950 font-semibold text-xs">
-                            {otsCountTillDate || ""}
-                          </div>
+                          <input
+                            type="number"
+                            placeholder="Till Date Count"
+                            value={otsCountTillDateInput !== "" ? otsCountTillDateInput : (otsCountDuringMonth ?? "")}
+                            disabled={Boolean(dbAutoFilled.ots) || isView}
+                            readOnly={Boolean(dbAutoFilled.ots) || isView}
+                            onChange={(e) => handleOtsCountTillChange(e.target.value)}
+                            className="w-full text-right px-2 py-1.5 border border-slate-300 rounded bg-white text-xs font-medium focus:ring-1 focus:ring-orange-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed disabled:pointer-events-none"
+                          />
                         </td>
                       </tr>
-                      <tr>
+
+                      {/* Regular OTS Collection */}
+                      <tr className="border-b border-slate-100">
                         <td className="p-3 font-semibold text-slate-800 border-r border-slate-200">
-                          OTS Amount (₹) @ ₹30,000 per OTS
+                          Regular OTS Collection (₹) @ ₹30,000 per OTS
                         </td>
                         <td className="p-2 border-r border-slate-200">
                           <div className="w-full text-right px-2 py-1.5 rounded border border-dashed border-orange-300 bg-orange-50/50 text-orange-950 font-bold text-xs">
-                            {otsCountDuringMonth !== "" ? formatINR(otsAmountDuringMonth) : ""}
+                            {otsRegularDuring > 0 ? formatINR(otsRegularDuring) : "₹0"}
                           </div>
                         </td>
                         <td className="p-2">
                           <div className="w-full text-right px-2 py-1.5 rounded border border-dashed border-orange-300 bg-orange-50/50 text-orange-950 font-bold text-xs">
-                            {otsCountTillDate !== "" ? formatINR(otsAmountTillDate) : ""}
+                            {otsRegularTill > 0 ? formatINR(otsRegularTill) : "₹0"}
                           </div>
+                        </td>
+                      </tr>
+
+                      {/* Extra OTS Collection */}
+                      <tr className="border-b border-slate-100">
+                        <td className="p-3 font-semibold text-slate-800 border-r border-slate-200">
+                          Extra OTS Collection (Additional Amount) (₹)
+                        </td>
+                        <td className="p-2 border-r border-slate-200">
+                          <input
+                            type="number"
+                            placeholder="Extra Amount"
+                            value={otsExtraAmountDuringMonth ?? ""}
+                            disabled={Boolean(dbAutoFilled.ots) || isView}
+                            readOnly={Boolean(dbAutoFilled.ots) || isView}
+                            onChange={(e) => handleOtsExtraDuringChange(e.target.value)}
+                            className="w-full text-right px-2 py-1.5 border border-slate-300 rounded bg-white text-xs font-medium focus:ring-1 focus:ring-orange-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed disabled:pointer-events-none"
+                          />
+                        </td>
+                        <td className="p-2">
+                          <input
+                            type="number"
+                            placeholder="Extra Till Date"
+                            value={otsExtraAmountTillDate !== "" ? otsExtraAmountTillDate : (otsExtraAmountDuringMonth ?? "")}
+                            disabled={Boolean(dbAutoFilled.ots) || isView}
+                            readOnly={Boolean(dbAutoFilled.ots) || isView}
+                            onChange={(e) => handleOtsExtraTillChange(e.target.value)}
+                            className="w-full text-right px-2 py-1.5 border border-slate-300 rounded bg-white text-xs font-medium focus:ring-1 focus:ring-orange-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed disabled:pointer-events-none"
+                          />
+                        </td>
+                      </tr>
+
+                      {/* Total OTS Amount Collected */}
+                      <tr className="bg-orange-50/40 font-bold border-t-2 border-orange-300">
+                        <td className="p-3 border-r border-slate-200 text-slate-900">
+                          Total OTS Amount Collected (₹)
+                        </td>
+                        <td className="p-2 border-r border-slate-200">
+                          <input
+                            type="number"
+                            placeholder="Total Amount"
+                            value={otsTotalAmountDuringMonth !== "" ? otsTotalAmountDuringMonth : (otsTotalDuring ? String(otsTotalDuring) : "")}
+                            disabled={Boolean(dbAutoFilled.ots) || isView}
+                            readOnly={Boolean(dbAutoFilled.ots) || isView}
+                            onChange={(e) => handleOtsTotalDuringChange(e.target.value)}
+                            className="w-full text-right px-2 py-1.5 border border-orange-300 rounded bg-orange-50/70 text-orange-950 text-xs font-bold focus:ring-1 focus:ring-orange-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed disabled:pointer-events-none"
+                          />
+                        </td>
+                        <td className="p-2">
+                          <input
+                            type="number"
+                            placeholder="Total Till Date"
+                            value={otsTotalAmountTillDate !== "" ? otsTotalAmountTillDate : (otsTotalTill ? String(otsTotalTill) : "")}
+                            disabled={Boolean(dbAutoFilled.ots) || isView}
+                            readOnly={Boolean(dbAutoFilled.ots) || isView}
+                            onChange={(e) => handleOtsTotalTillChange(e.target.value)}
+                            className="w-full text-right px-2 py-1.5 border border-orange-300 rounded bg-orange-50/70 text-orange-950 text-xs font-bold focus:ring-1 focus:ring-orange-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed disabled:pointer-events-none"
+                          />
                         </td>
                       </tr>
                     </tbody>
@@ -2544,8 +3500,8 @@ const CPRForm = ({
                 </div>
 
                 <p className="text-[11px] text-slate-500">
-                  OTS Amount fills itself: Number of OTS × ₹30,000 (cost of one OTS for a year). It
-                  cannot be typed.
+                  Total OTS collection automatically separates into Regular OTS Collection (Number of OTS × ₹30,000)
+                  and Extra OTS Collection (Additional Amount).
                 </p>
               </div>
             </div>
@@ -2576,14 +3532,18 @@ const CPRForm = ({
                 <table className="w-full text-left text-xs border border-slate-200 border-collapse">
                   <thead>
                     <tr className="bg-rose-50/50 text-slate-800 font-semibold border-b border-slate-200">
-                      <th className="p-3 border-r border-slate-200 w-1/2">Particulars</th>
-                      <th className="p-3 border-r border-slate-200 text-center w-1/4">
-                        During the Month <span className="text-red-500">*</span>
+                      <th className="p-3 border-r border-slate-200 w-2/5">Particulars</th>
+                      <th className="p-3 border-r border-slate-200 text-center w-1/5">
+                        Number of Donors
                       </th>
-                      <th className="p-3 text-right w-1/4">Till Date</th>
+                      <th className="p-3 border-r border-slate-200 text-center w-1/5">
+                        During the Month (₹) <span className="text-red-500">*</span>
+                      </th>
+                      <th className="p-3 text-right w-1/5">Till Date (₹)</th>
                     </tr>
                   </thead>
                   <tbody>
+                    {/* General Donation */}
                     <tr className="border-b border-slate-100">
                       <td className="p-3 font-semibold text-slate-800 border-r border-slate-200">
                         General Donation (₹)
@@ -2591,6 +3551,23 @@ const CPRForm = ({
                       <td className="p-2 border-r border-slate-200">
                         <input
                           type="number"
+                          placeholder="No. of Donors"
+                          value={donations?.general?.donors ?? ""}
+                          disabled={Boolean(dbAutoFilled.donations) || isView}
+                          readOnly={Boolean(dbAutoFilled.donations) || isView}
+                          onChange={(e) =>
+                            setDonations({
+                              ...donations,
+                              general: { ...donations.general, donors: e.target.value },
+                            })
+                          }
+                          className="w-full text-center px-2 py-1.5 border border-slate-300 rounded bg-white text-xs font-medium focus:ring-1 focus:ring-rose-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed disabled:pointer-events-none"
+                        />
+                      </td>
+                      <td className="p-2 border-r border-slate-200">
+                        <input
+                          type="number"
+                          placeholder="Amount"
                           value={donations?.general?.during ?? ""}
                           disabled={Boolean(dbAutoFilled.donations) || isView}
                           readOnly={Boolean(dbAutoFilled.donations) || isView}
@@ -2606,6 +3583,7 @@ const CPRForm = ({
                       <td className="p-2">
                         <input
                           type="number"
+                          placeholder="Amount"
                           value={donations?.general?.till ?? ""}
                           disabled={Boolean(dbAutoFilled.donations) || isView}
                           readOnly={Boolean(dbAutoFilled.donations) || isView}
@@ -2619,6 +3597,8 @@ const CPRForm = ({
                         />
                       </td>
                     </tr>
+
+                    {/* CSR Donation */}
                     <tr className="border-b border-slate-100">
                       <td className="p-3 font-semibold text-slate-800 border-r border-slate-200">
                         CSR Donation (₹)
@@ -2626,6 +3606,23 @@ const CPRForm = ({
                       <td className="p-2 border-r border-slate-200">
                         <input
                           type="number"
+                          placeholder="No. of Donors"
+                          value={donations?.csr?.donors ?? ""}
+                          disabled={Boolean(dbAutoFilled.donations) || isView}
+                          readOnly={Boolean(dbAutoFilled.donations) || isView}
+                          onChange={(e) =>
+                            setDonations({
+                              ...donations,
+                              csr: { ...donations.csr, donors: e.target.value },
+                            })
+                          }
+                          className="w-full text-center px-2 py-1.5 border border-slate-300 rounded bg-white text-xs font-medium focus:ring-1 focus:ring-rose-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed disabled:pointer-events-none"
+                        />
+                      </td>
+                      <td className="p-2 border-r border-slate-200">
+                        <input
+                          type="number"
+                          placeholder="Amount"
                           value={donations?.csr?.during ?? ""}
                           disabled={Boolean(dbAutoFilled.donations) || isView}
                           readOnly={Boolean(dbAutoFilled.donations) || isView}
@@ -2641,6 +3638,7 @@ const CPRForm = ({
                       <td className="p-2">
                         <input
                           type="number"
+                          placeholder="Amount"
                           value={donations?.csr?.till ?? ""}
                           disabled={Boolean(dbAutoFilled.donations) || isView}
                           readOnly={Boolean(dbAutoFilled.donations) || isView}
@@ -2654,9 +3652,77 @@ const CPRForm = ({
                         />
                       </td>
                     </tr>
+
+                    {/* Non-CSR Donation */}
+                    <tr className="border-b border-slate-100">
+                      <td className="p-3 font-semibold text-slate-800 border-r border-slate-200">
+                        Non-CSR Donation (₹)
+                      </td>
+                      <td className="p-2 border-r border-slate-200">
+                        <input
+                          type="number"
+                          placeholder="No. of Donors"
+                          value={donations?.nonCsr?.donors ?? donations?.other?.donors ?? ""}
+                          disabled={Boolean(dbAutoFilled.donations) || isView}
+                          readOnly={Boolean(dbAutoFilled.donations) || isView}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setDonations({
+                              ...donations,
+                              nonCsr: { ...(donations.nonCsr || donations.other), donors: val },
+                              other: { ...(donations.other || donations.nonCsr), donors: val },
+                            });
+                          }}
+                          className="w-full text-center px-2 py-1.5 border border-slate-300 rounded bg-white text-xs font-medium focus:ring-1 focus:ring-rose-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed disabled:pointer-events-none"
+                        />
+                      </td>
+                      <td className="p-2 border-r border-slate-200">
+                        <input
+                          type="number"
+                          placeholder="Amount"
+                          value={donations?.nonCsr?.during ?? donations?.other?.during ?? ""}
+                          disabled={Boolean(dbAutoFilled.donations) || isView}
+                          readOnly={Boolean(dbAutoFilled.donations) || isView}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setDonations({
+                              ...donations,
+                              nonCsr: { ...(donations.nonCsr || donations.other), during: val },
+                              other: { ...(donations.other || donations.nonCsr), during: val },
+                            });
+                          }}
+                          className="w-full text-right px-2 py-1.5 border border-slate-300 rounded bg-white text-xs font-medium focus:ring-1 focus:ring-rose-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed disabled:pointer-events-none"
+                        />
+                      </td>
+                      <td className="p-2">
+                        <input
+                          type="number"
+                          placeholder="Amount"
+                          value={donations?.nonCsr?.till ?? donations?.other?.till ?? ""}
+                          disabled={Boolean(dbAutoFilled.donations) || isView}
+                          readOnly={Boolean(dbAutoFilled.donations) || isView}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setDonations({
+                              ...donations,
+                              nonCsr: { ...(donations.nonCsr || donations.other), till: val },
+                              other: { ...(donations.other || donations.nonCsr), till: val },
+                            });
+                          }}
+                          className="w-full text-right px-2 py-1.5 border border-slate-300 rounded bg-white text-xs font-medium focus:ring-1 focus:ring-rose-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed disabled:pointer-events-none"
+                        />
+                      </td>
+                    </tr>
+
+                    {/* TOTAL Donation */}
                     <tr className="bg-slate-50 font-bold border-t-2 border-slate-300">
                       <td className="p-3 border-r border-slate-200 text-slate-900">
                         TOTAL Donation (₹)
+                      </td>
+                      <td className="p-2 border-r border-slate-200">
+                        <div className="w-full text-center px-2 py-1.5 rounded border border-dashed border-rose-300 bg-rose-50/60 text-rose-950 font-bold text-xs">
+                          {donationTotals.donors || ""}
+                        </div>
                       </td>
                       <td className="p-2 border-r border-slate-200">
                         <div className="w-full text-right px-2 py-1.5 rounded border border-dashed border-rose-300 bg-rose-50/60 text-rose-950 font-bold text-xs">
@@ -2684,7 +3750,7 @@ const CPRForm = ({
               <span className="w-6 h-6 rounded-full bg-white text-[#7e22ce] font-bold text-xs flex items-center justify-center">
                 E
               </span>
-              <h2 className="text-sm font-bold tracking-wide uppercase">Collection Boxes</h2>
+              <h2 className="text-sm font-bold tracking-wide uppercase">Seva Patra</h2>
             </div>
 
             <div className="p-5">
@@ -2714,16 +3780,26 @@ const CPRForm = ({
                             setCollectionBoxes({
                               ...collectionBoxes,
                               boxesThisMonth: e.target.value,
-                              boxesTillDate: e.target.value,
                             })
                           }
                           className="w-full text-right px-2 py-1.5 border border-slate-300 rounded bg-white text-xs font-medium focus:ring-1 focus:ring-purple-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed disabled:pointer-events-none"
                         />
                       </td>
                       <td className="p-2">
-                        <div className="w-full text-right px-2 py-1.5 rounded border border-dashed border-purple-300 bg-purple-50/40 text-purple-950 font-semibold text-xs">
-                          {collectionBoxes.boxesTillDate || ""}
-                        </div>
+                        <input
+                          type="number"
+                          name="boxes_placed_till_date"
+                          value={collectionBoxes?.boxesTillDate ?? ""}
+                          disabled={isManualFieldDisabled}
+                          readOnly={isManualFieldDisabled}
+                          onChange={(e) =>
+                            setCollectionBoxes({
+                              ...collectionBoxes,
+                              boxesTillDate: e.target.value,
+                            })
+                          }
+                          className="w-full text-right px-2 py-1.5 border border-slate-300 rounded bg-white text-xs font-medium focus:ring-1 focus:ring-purple-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed disabled:pointer-events-none"
+                        />
                       </td>
                     </tr>
                     <tr>
@@ -2740,18 +3816,26 @@ const CPRForm = ({
                             setCollectionBoxes({
                               ...collectionBoxes,
                               amountThisMonth: e.target.value,
-                              amountTillDate: e.target.value,
                             })
                           }
                           className="w-full text-right px-2 py-1.5 border border-slate-300 rounded bg-white text-xs font-medium focus:ring-1 focus:ring-purple-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed disabled:pointer-events-none"
                         />
                       </td>
                       <td className="p-2">
-                        <div className="w-full text-right px-2 py-1.5 rounded border border-dashed border-purple-300 bg-purple-50/40 text-purple-950 font-semibold text-xs">
-                          {collectionBoxes.amountTillDate
-                            ? Number(collectionBoxes.amountTillDate).toLocaleString("en-IN")
-                            : ""}
-                        </div>
+                        <input
+                          type="number"
+                          name="boxes_amount_till_date"
+                          value={collectionBoxes?.amountTillDate ?? ""}
+                          disabled={isManualFieldDisabled}
+                          readOnly={isManualFieldDisabled}
+                          onChange={(e) =>
+                            setCollectionBoxes({
+                              ...collectionBoxes,
+                              amountTillDate: e.target.value,
+                            })
+                          }
+                          className="w-full text-right px-2 py-1.5 border border-slate-300 rounded bg-white text-xs font-medium focus:ring-1 focus:ring-purple-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed disabled:pointer-events-none"
+                        />
                       </td>
                     </tr>
                   </tbody>
@@ -3160,9 +4244,8 @@ const CPRForm = ({
                       {events.map((ev, index) => (
                         <div
                           key={ev.id || index}
-                          className={`border rounded-md p-4 space-y-4 ${
-                            ev.isFromDb ? "border-indigo-200 bg-slate-50/70" : "border-slate-300 bg-white"
-                          }`}
+                          className={`border rounded-md p-4 space-y-4 ${ev.isFromDb ? "border-indigo-200 bg-slate-50/70" : "border-slate-300 bg-white"
+                            }`}
                         >
                           <div className="flex items-center justify-between border-b border-slate-200 pb-2">
                             <div className="flex items-center gap-2">
@@ -3447,11 +4530,10 @@ const CPRForm = ({
                     type="button"
                     disabled={isManualFieldDisabled}
                     onClick={() => setSamagriReached("Yes")}
-                    className={`px-3 py-1.5 text-xs font-semibold rounded-l-md border ${
-                      samagriReached === "Yes"
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-l-md border ${samagriReached === "Yes"
                         ? "bg-emerald-600 text-white border-emerald-600"
                         : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
-                    } ${dbAutoFilled.samagri ? "cursor-not-allowed opacity-90 pointer-events-none" : ""}`}
+                      } ${dbAutoFilled.samagri ? "cursor-not-allowed opacity-90 pointer-events-none" : ""}`}
                   >
                     Yes
                   </button>
@@ -3459,11 +4541,10 @@ const CPRForm = ({
                     type="button"
                     disabled={isManualFieldDisabled}
                     onClick={() => setSamagriReached("No")}
-                    className={`px-3 py-1.5 text-xs font-semibold rounded-r-md border-t border-b border-r ${
-                      samagriReached === "No"
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-r-md border-t border-b border-r ${samagriReached === "No"
                         ? "bg-[#b91c1c] text-white border-[#b91c1c]"
                         : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
-                    } ${dbAutoFilled.samagri ? "cursor-not-allowed opacity-90 pointer-events-none" : ""}`}
+                      } ${dbAutoFilled.samagri ? "cursor-not-allowed opacity-90 pointer-events-none" : ""}`}
                   >
                     No
                   </button>
@@ -3544,10 +4625,10 @@ const CPRForm = ({
                           <div className="w-full text-right px-2 py-1 rounded border border-dashed border-slate-300 bg-slate-50 text-slate-700 font-medium text-xs">
                             {donorBoard.nonCsr.total !== "" && donorBoard.nonCsr.sent !== ""
                               ? Math.max(
-                                  0,
-                                  (Number(donorBoard.nonCsr.total) || 0) -
-                                    (Number(donorBoard.nonCsr.sent) || 0)
-                                )
+                                0,
+                                (Number(donorBoard.nonCsr.total) || 0) -
+                                (Number(donorBoard.nonCsr.sent) || 0)
+                              )
                               : ""}
                           </div>
                         </td>
@@ -3606,10 +4687,10 @@ const CPRForm = ({
                           <div className="w-full text-right px-2 py-1 rounded border border-dashed border-slate-300 bg-slate-50 text-slate-700 font-medium text-xs">
                             {donorBoard.csr.total !== "" && donorBoard.csr.sent !== ""
                               ? Math.max(
-                                  0,
-                                  (Number(donorBoard.csr.total) || 0) -
-                                    (Number(donorBoard.csr.sent) || 0)
-                                )
+                                0,
+                                (Number(donorBoard.csr.total) || 0) -
+                                (Number(donorBoard.csr.sent) || 0)
+                              )
                               : ""}
                           </div>
                         </td>
@@ -3644,11 +4725,10 @@ const CPRForm = ({
                     type="button"
                     disabled={isManualFieldDisabled}
                     onClick={() => setSchoolProgressSent("Yes")}
-                    className={`px-3 py-1.5 text-xs font-semibold rounded-l-md border ${
-                      schoolProgressSent === "Yes"
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-l-md border ${schoolProgressSent === "Yes"
                         ? "bg-emerald-600 text-white border-emerald-600"
                         : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
-                    } ${dbAutoFilled.schoolProgress ? "cursor-not-allowed opacity-90 pointer-events-none" : ""}`}
+                      } ${dbAutoFilled.schoolProgress ? "cursor-not-allowed opacity-90 pointer-events-none" : ""}`}
                   >
                     Yes
                   </button>
@@ -3656,11 +4736,10 @@ const CPRForm = ({
                     type="button"
                     disabled={isManualFieldDisabled}
                     onClick={() => setSchoolProgressSent("No")}
-                    className={`px-3 py-1.5 text-xs font-semibold rounded-r-md border-t border-b border-r ${
-                      schoolProgressSent === "No"
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-r-md border-t border-b border-r ${schoolProgressSent === "No"
                         ? "bg-[#b91c1c] text-white border-[#b91c1c]"
                         : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
-                    } ${dbAutoFilled.schoolProgress ? "cursor-not-allowed opacity-90 pointer-events-none" : ""}`}
+                      } ${dbAutoFilled.schoolProgress ? "cursor-not-allowed opacity-90 pointer-events-none" : ""}`}
                   >
                     No
                   </button>
@@ -3787,22 +4866,36 @@ const CPRForm = ({
                       Download the filled CPR
                     </h3>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      It is checked and saved first, then downloaded as a PDF with spaces for the
-                      signatures.
+                      Download the completed CPR report in both formats: PDF (for physical review and signatures) or Excel (with embedded formulas and automated totals).
                     </p>
-                    <button
-                      type="button"
-                      disabled={isGeneratingPdf}
-                      onClick={handleDownloadPDF}
-                      className="mt-3 px-4 py-2 rounded bg-[#0f3d4c] hover:bg-[#092934] text-white text-xs font-semibold shadow-xs inline-flex items-center gap-2 transition disabled:opacity-50 cursor-pointer"
-                    >
-                      {isGeneratingPdf ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <Download className="w-3.5 h-3.5" />
-                      )}
-                      <span>Download the filled CPR</span>
-                    </button>
+                    <div className="mt-3 flex flex-wrap items-center gap-2.5">
+                      <button
+                        type="button"
+                        disabled={isGeneratingPdf}
+                        onClick={handleDownloadPDF}
+                        className="px-4 py-2 rounded bg-[#0f3d4c] hover:bg-[#092934] text-white text-xs font-semibold shadow-xs inline-flex items-center gap-2 transition disabled:opacity-50 cursor-pointer"
+                      >
+                        {isGeneratingPdf ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Download className="w-3.5 h-3.5" />
+                        )}
+                        <span>Download PDF (.pdf)</span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isGeneratingExcel}
+                        onClick={handleDownloadExcel}
+                        className="px-4 py-2 rounded bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold shadow-xs inline-flex items-center gap-2 transition disabled:opacity-50 cursor-pointer"
+                      >
+                        {isGeneratingExcel ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <FileSpreadsheet className="w-3.5 h-3.5" />
+                        )}
+                        <span>Download Excel (.xlsx)</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -3815,8 +4908,7 @@ const CPRForm = ({
                 <div>
                   <h3 className="text-xs font-bold text-slate-900">Get it signed</h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Print it and get it signed by the President and the Secretary. Then scan it, or
-                    take a clear photo of each page.
+                    Print the downloaded report and get it signed by the President and Secretary.
                   </p>
                 </div>
               </div>
@@ -3826,69 +4918,162 @@ const CPRForm = ({
                 <span className="w-7 h-7 rounded-full bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center flex-shrink-0 mt-0.5">
                   3
                 </span>
-                <div className="flex-1">
-                  <h3 className="text-xs font-bold text-slate-900">Upload the signed CPR</h3>
-                  {!isManualFieldDisabled ? (
-                    <>
-                      <div className="mt-2 flex flex-wrap items-center gap-3">
-                        <input
-                          type="file"
-                          ref={fileInputRef}
-                          onChange={handleFileUpload}
-                          className="hidden"
-                          accept=".pdf,image/png,image/jpeg,image/webp"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => fileInputRef.current?.click()}
-                          className="px-4 py-2 rounded border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs font-semibold inline-flex items-center gap-2 transition cursor-pointer"
-                        >
-                          <Upload className="w-3.5 h-3.5" />
-                          Upload signed CPR
-                        </button>
-                        <span className="text-[11px] text-slate-400">
-                          PDF, JPG, JPEG, PNG, up to 10 MB
-                        </span>
-                      </div>
-                      {existingSignedCprUrl && !signedFile && (
-                        <div className="mt-2.5 p-2 rounded border border-teal-200 bg-teal-50/70 flex items-center justify-between text-xs max-w-md">
-                          <span className="text-teal-900 font-medium">
-                            Current Signed CPR Document on record
-                          </span>
-                          <a
-                            href={existingSignedCprUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-teal-700 underline font-semibold hover:text-teal-900 ml-2"
+                <div className="flex-1 space-y-4">
+                  {/* Signed CPR Upload */}
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-900">Upload the signed CPR</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Supports signed CPR in PDF, Excel (.xlsx/.xls), or clear image formats.
+                    </p>
+                    {!isManualFieldDisabled ? (
+                      <>
+                        <div className="mt-2 flex flex-wrap items-center gap-3">
+                          <input
+                            type="file"
+                            ref={fileInputRef}
+                            onChange={handleFileUpload}
+                            className="hidden"
+                            accept=".pdf,.xlsx,.xls,image/png,image/jpeg,image/webp"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="px-4 py-2 rounded border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs font-semibold inline-flex items-center gap-2 transition cursor-pointer"
                           >
-                            View File
-                          </a>
-                        </div>
-                      )}
-                      {signedFile && (
-                        <div className="mt-2 flex items-center gap-2 text-xs text-emerald-700 font-medium">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                          <span>
-                            {signedFile.name} ({(signedFile.size / 1024).toFixed(1)} KB)
+                            <Upload className="w-3.5 h-3.5" />
+                            Upload signed CPR
+                          </button>
+                          <span className="text-[11px] text-slate-400">
+                            PDF, Excel (.xlsx/.xls), JPG, PNG, up to 10 MB
                           </span>
                         </div>
-                      )}
-                    </>
-                  ) : (
-                    <div className="mt-2">
-                      {existingSignedCprUrl ? (
-                        <div className="p-2.5 rounded border border-teal-200 bg-teal-50/70 flex items-center justify-between text-xs max-w-">
-                          <span className="text-teal-900 font-medium">
-                            Signed CPR Document on record
-                          </span>                          
+                        {/* {existingSignedCprUrl && !signedFile && (
+                          <div className="mt-2.5 p-2 rounded border border-teal-200 bg-teal-50/70 flex items-center justify-between text-xs max-w-md">
+                            <span className="text-teal-900 font-medium">
+                              Current Signed CPR Document on record
+                            </span>
+                            <a
+                              href={existingSignedCprUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-teal-700 underline font-semibold hover:text-teal-900 ml-2"
+                            >
+                              View File
+                            </a>
+                          </div>
+                        )} */}
+                        {signedFile && (
+                          <div className="mt-2 flex items-center gap-2 text-xs text-emerald-700 font-medium">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                            <span>
+                              {signedFile.name} ({(signedFile.size / 1024).toFixed(1)} KB)
+                            </span>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="mt-2">
+                        {existingSignedCprUrl ? (
+                          <div className="p-2.5 rounded border border-teal-200 bg-teal-50/70 flex items-center justify-between text-xs max-w-md">
+                            <span className="text-teal-900 font-medium">
+                              Signed CPR Document on record
+                            </span>
+                            <a
+                              href={existingSignedCprUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-teal-700 underline font-semibold hover:text-teal-900 ml-2"
+                            >
+                              View File
+                            </a>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-500 italic">
+                            No signed CPR document was uploaded.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Separate Raw Excel Data File Upload for Verification */}
+                  <div className="pt-3 border-t border-slate-100">
+                    <h3 className="text-xs font-bold text-slate-900">
+                      Upload Original / Raw Excel Data File (Optional)
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Upload the raw/original Excel spreadsheet file separately for further verification, audit, and data processing.
+                    </p>
+                    {!isManualFieldDisabled ? (
+                      <>
+                        <div className="mt-2 flex flex-wrap items-center gap-3">
+                          <input
+                            type="file"
+                            ref={rawExcelInputRef}
+                            onChange={handleRawExcelUpload}
+                            className="hidden"
+                            accept=".xlsx,.xls,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => rawExcelInputRef.current?.click()}
+                            className="px-4 py-2 rounded border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-semibold inline-flex items-center gap-2 transition cursor-pointer"
+                          >
+                            <FileSpreadsheet className="w-3.5 h-3.5" />
+                            Upload Raw Excel File
+                          </button>
+                          <span className="text-[11px] text-slate-400">
+                            Excel (.xlsx, .xls), up to 10 MB
+                          </span>
                         </div>
-                      ) : (
-                        <p className="text-xs text-slate-500 italic">
-                          No signed CPR document was uploaded.
-                        </p>
-                      )}
-                    </div>
-                  )}
+                        {existingRawExcelUrl && !rawExcelFile && (
+                          <div className="mt-2.5 p-2 rounded border border-emerald-200 bg-emerald-50/70 flex items-center justify-between text-xs max-w-md">
+                            <span className="text-emerald-900 font-medium">
+                              Raw Excel file on record
+                            </span>
+                            <a
+                              href={existingRawExcelUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-emerald-700 underline font-semibold hover:text-emerald-900 ml-2"
+                            >
+                              Download File
+                            </a>
+                          </div>
+                        )}
+                        {rawExcelFile && (
+                          <div className="mt-2 flex items-center gap-2 text-xs text-emerald-700 font-medium">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                            <span>
+                              {rawExcelFile.name} ({(rawExcelFile.size / 1024).toFixed(1)} KB)
+                            </span>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="mt-2">
+                        {existingRawExcelUrl ? (
+                          <div className="p-2.5 rounded border border-emerald-200 bg-emerald-50/70 flex items-center justify-between text-xs max-w-md">
+                            <span className="text-emerald-900 font-medium">
+                              Raw Excel Data File on record
+                            </span>
+                            <a
+                              href={existingRawExcelUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-emerald-700 underline font-semibold hover:text-emerald-900 ml-2"
+                            >
+                              Download File
+                            </a>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-500 italic">
+                            No raw Excel file was uploaded.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -3939,69 +5124,78 @@ const CPRForm = ({
             </div>
           </section>
         </main>
-      {/* Hidden print container for high-fidelity PDF capture */}
-      <div
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          width: "794px",
-          zIndex: -9999,
-          pointerEvents: "none",
-          visibility: isGeneratingPdf ? "visible" : "hidden",
-          opacity: isGeneratingPdf ? 1 : 0,
-          backgroundColor: "#ffffff",
-        }}
-      >
-        <CPRPrintReport
-          ref={printableRef}
-          chapterName={chapterName}
-          monthIndex={monthIndex}
-          monthName={monthName}
-          financialYear={financialYear}
-          reportId={currentReportId}
-          csrStatus={csrStatus}
-          cppName={cppName}
-          submissionDate={submissionDate}
-          subChapters={subChapters}
-          memberships={memberships}
-          sectionATotals={sectionATotals}
-          noMeetingHeld={noMeetingHeld}
-          meetings={meetings}
-          otsPRP={otsPRP}
-          otsCountDuringMonth={otsCountDuringMonth}
-          otsCountTillDate={otsCountTillDate}
-          otsAmountDuringMonth={otsAmountDuringMonth}
-          otsAmountTillDate={otsAmountTillDate}
-          donations={donations}
-          donationTotals={donationTotals}
-          collectionBoxes={collectionBoxes}
-          investments={investments}
-          totalInvestment={totalInvestment}
-          cashInHand={cashInHand}
-          bankBalances={bankBalances}
-          totalBankBalance={totalBankBalance}
-          totalCashAndBank={totalCashAndBank}
-          vanyatras={vanyatras}
-          vanyatrasCountThisMonth={vanyatras.length}
-          vanyatrasCountTillDate={vanyatras.length}
-          events={events}
-          anchals={anchals}
-          samagriReached={samagriReached}
-          samagriRemarks={samagriRemarks}
-          donorBoard={donorBoard}
-          schoolProgressSent={schoolProgressSent}
-          progressRemarks={progressRemarks}
-          selectedMonitoringAnchal={selectedMonitoringAnchal}
-          monitoringAnchalsList={monitoringAnchalsList}
-          signedFile={signedFile}
-          formatINR={formatINR}
-        />
+        {/* Hidden print container for high-fidelity PDF capture */}
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "794px",
+            zIndex: -9999,
+            pointerEvents: "none",
+            visibility: isGeneratingPdf ? "visible" : "hidden",
+            opacity: isGeneratingPdf ? 1 : 0,
+            backgroundColor: "#ffffff",
+          }}
+        >
+          <CPRPrintReport
+            ref={printableRef}
+            chapterName={chapterName}
+            monthIndex={monthIndex}
+            monthName={monthName}
+            financialYear={financialYear}
+            reportId={currentReportId}
+            csrStatus={csrStatus}
+            cppName={cppName}
+            submissionDate={submissionDate}
+            subChapters={subChapters}
+            memberships={memberships}
+            sectionATotals={sectionATotals}
+            noMeetingHeld={noMeetingHeld}
+            meetings={meetings}
+            otsPRP={otsPRP}
+            otsCountDuringMonth={otsCountDuringMonth}
+            otsCountTillDate={otsCountTillDate}
+            otsRegularDuring={otsRegularDuring}
+            otsRegularTill={otsRegularTill}
+            otsExtraDuring={otsExtraDuring}
+            otsExtraTill={otsExtraTill}
+            otsTotalDuring={otsTotalDuring}
+            otsTotalTill={otsTotalTill}
+            otsAmountDuringMonth={otsAmountDuringMonth}
+            otsAmountTillDate={otsAmountTillDate}
+            donations={donations}
+            donationTotals={donationTotals}
+            collectionBoxes={collectionBoxes}
+            investments={investments}
+            totalInvestment={totalInvestment}
+            cashInHand={cashInHand}
+            bankBalances={bankBalances}
+            totalBankBalance={totalBankBalance}
+            totalCashAndBank={totalCashAndBank}
+            vanyatras={vanyatras}
+            vanyatrasCountThisMonth={vanyatras.length}
+            vanyatrasCountTillDate={vanyatras.length}
+            events={events}
+            anchals={anchals}
+            samagriReached={samagriReached}
+            samagriRemarks={samagriRemarks}
+            donorBoard={donorBoard}
+            schoolProgressSent={schoolProgressSent}
+            progressRemarks={progressRemarks}
+            selectedMonitoringAnchal={selectedMonitoringAnchal}
+            monitoringAnchalsList={monitoringAnchalsList}
+            signedFile={signedFile}
+            formatINR={formatINR}
+          />
+        </div>
       </div>
-    </div>
 
       {/* ================= FIXED BOTTOM ACTION BAR ================= */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200 py-3 px-6 z-40 shadow-lg">
+      <div
+        style={{ left: bottomBarLeft }}
+        className="fixed bottom-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200 py-3 px-6 z-30 shadow-lg transition-[left] duration-200 ease-linear"
+      >
         <div className="max-w-[1400px] mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2 text-xs text-slate-500">
             <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
@@ -4026,6 +5220,15 @@ const CPRForm = ({
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>Download PDF</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownloadExcel}
+                  disabled={isGeneratingExcel}
+                  className="px-4 py-2 rounded-md border border-emerald-600 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-semibold transition shadow-xs inline-flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5" />
+                  <span>Download Excel</span>
                 </button>
               </>
             ) : (
@@ -4055,6 +5258,15 @@ const CPRForm = ({
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>Download PDF</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownloadExcel}
+                  disabled={isGeneratingExcel}
+                  className="px-4 py-2 rounded-md border border-emerald-600 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-semibold transition shadow-xs inline-flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5" />
+                  <span>Download Excel</span>
                 </button>
                 <button
                   type="button"

@@ -18,45 +18,45 @@ const getSalutation = (donor) => {
 };
 
 const TABLE_HEADERS = [
-  "STATE",
-  "ANCHAL CLUSTER",
-  "CLUSTER",
-  "SUB CLUSTER",
-  "VILLAGE",
-  "TEACHER",
-  "BOYS",
-  "GIRLS",
-  "TOTAL",
+  { label: "STATE", width: "11%" },
+  { label: "ANCHAL CLUSTER", width: "13%" },
+  { label: "CLUSTER", width: "11%" },
+  { label: "SUB CLUSTER", width: "11%" },
+  { label: "VILLAGE", width: "14%" },
+  { label: "TEACHER", width: "19%" },
+  { label: "BOYS", width: "7%" },
+  { label: "GIRLS", width: "7%" },
+  { label: "TOTAL", width: "7%" },
 ];
 
 const SchoolTableRows = ({ rows }) =>
   rows.map((dataSumm) => (
     <tr key={dataSumm.id}>
-      <td className="border border-black px-2 py-1 text-xs text-center">
+      <td className="border border-black px-2 py-1.5 text-xs text-center align-middle break-words">
         {dataSumm.school_state}
       </td>
-      <td className="border border-black px-2 py-1 text-xs text-center">
+      <td className="border border-black px-2 py-1.5 text-xs text-center align-middle break-words">
         {dataSumm.achal}
       </td>
-      <td className="border border-black px-2 py-1 text-xs text-center">
+      <td className="border border-black px-2 py-1.5 text-xs text-center align-middle break-words">
         {dataSumm.cluster}
       </td>
-      <td className="border border-black px-2 py-1 text-xs text-center">
+      <td className="border border-black px-2 py-1.5 text-xs text-center align-middle break-words">
         {dataSumm.sub_cluster}
       </td>
-      <td className="border border-black px-2 py-1 text-xs text-center">
+      <td className="border border-black px-2 py-1.5 text-xs text-center align-middle break-words">
         {dataSumm.village}
       </td>
-      <td className="border border-black px-2 py-1 text-xs text-center">
+      <td className="border border-black px-2 py-1.5 text-xs text-center align-middle break-words">
         {dataSumm.teacher}
       </td>
-      <td className="border border-black px-2 py-1 text-xs text-center">
+      <td className="border border-black px-1.5 py-1.5 text-xs text-center align-middle">
         {dataSumm.boys}
       </td>
-      <td className="border border-black px-2 py-1 text-xs text-center">
+      <td className="border border-black px-1.5 py-1.5 text-xs text-center align-middle">
         {dataSumm.girls}
       </td>
-      <td className="border border-black px-2 py-1 text-xs text-center">
+      <td className="border border-black px-1.5 py-1.5 text-xs text-center align-middle">
         {dataSumm.total}
       </td>
     </tr>
@@ -86,16 +86,17 @@ const DonorHeader = ({ SchoolAlotReceipt, OTSReceipts }) => (
 );
 
 const SchoolTable = ({ rows }) => (
-  <div className="overflow-x-auto">
-    <table className="min-w-full border-collapse border border-black">
+  <div className="w-full">
+    <table className="w-full border-collapse border border-black table-fixed text-xs">
       <thead>
-        <tr className="bg-gray-200">
-          {TABLE_HEADERS.map((header, index) => (
+        <tr className="bg-gray-100">
+          {TABLE_HEADERS.map((col, index) => (
             <th
-              key={`${header}-${index}`}
-              className="border border-black px-1 py-1 text-center text-xs"
+              key={`${col.label}-${index}`}
+              style={{ width: col.width }}
+              className="border border-black px-2 py-2 text-center text-xs font-semibold align-middle"
             >
-              {header}
+              {col.label}
             </th>
           ))}
         </tr>
@@ -140,7 +141,7 @@ const AllotmentPrintLetter = ({
   const schoolsForPage1 = showOnPage1 ? schools : [];
   const remainingSchools = showOnPage1 ? [] : schools;
   const schoolChunks =
-    remainingSchools.length > 0 ? chunkArray(remainingSchools, 15) : [];
+    remainingSchools.length > 0 ? chunkArray(remainingSchools, 30) : [];
 
   const authSignDesignation = Array.isArray(chapters)
     ? chapters?.[0]?.auth_sign
@@ -175,6 +176,10 @@ const AllotmentPrintLetter = ({
             margin-bottom: 0 !important;
             page-break-after: always;
             break-after: page;
+          }
+          .pdf-page:last-child {
+            page-break-after: auto !important;
+            break-after: auto !important;
           }
         }
       `}</style>
