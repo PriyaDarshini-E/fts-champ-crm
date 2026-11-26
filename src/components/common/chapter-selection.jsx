@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
+import { useLocation } from "react-router-dom";
 import axios from "axios";
 import Cookies from "js-cookie";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -201,6 +202,14 @@ const ChapterSelection = () => {
     onError: () => toast.error("Something went wrong"),
   });
 
+  const location = useLocation();
+  const isCprDashboard =
+    location.pathname === "/cpr-dashboard" ||
+    location.pathname === "/cpr/dashboard" ||
+    location.pathname.startsWith("/cpr-dashboard") ||
+    location.pathname.startsWith("/cpr/dashboard");
+
+  if (isCprDashboard) return null;
   if (userType !== "4" && userType !== "5" && userType !== "3") return null;
 
   return (

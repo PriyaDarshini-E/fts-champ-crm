@@ -327,18 +327,22 @@ const CPRReportList = ({ onStartOrCreate }) => {
             />
 
             {/* Financial Year Selector */}
-            <select
-              value={selectedFY}
-              onChange={(e) => setSelectedFY(e.target.value)}
-              className="h-8 px-2.5 text-xs bg-white border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-700 font-medium"
-            >
-              <option value="all">All Financial Years</option>
-              {availableYears.map((fy) => (
-                <option key={fy} value={fy}>
-                  {fy}
-                </option>
-              ))}
-            </select>
+            <div className="flex items-center gap-2">
+  {availableYears.map((fy) => (
+    <button
+      key={fy}
+      type="button"
+      onClick={() => setSelectedFY(fy)}
+      className={`h-8 px-3 text-xs font-medium rounded border transition-colors ${
+        selectedFY === fy
+          ? "bg-blue-600 text-white border-blue-600"
+          : "bg-white text-slate-700 border-slate-300 hover:bg-blue-50"
+      }`}
+    >
+      {fy}
+    </button>
+  ))}
+</div>
 
             {/* Status Filter */}
             <select
