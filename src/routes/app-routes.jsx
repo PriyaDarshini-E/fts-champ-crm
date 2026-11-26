@@ -10,6 +10,7 @@ import CPRReportIndex from "@/app/report/cpr/cpr-report-index";
 import CPRBank from "@/app/report/cpr/cpr-bank";
 import CPRVanyatra from "@/app/report/cpr/cpr-vanyatra";
 import CPRDisbursement from "@/app/report/cpr/cpr-disbursement";
+import CPRDashboard from "@/app/report/cpr/cpr-dashboard";
 import EventList from "@/app/event/event-list";
 import EventCreate from "@/app/event/event-create";
 import EventEdit from "@/app/event/event-edit";
@@ -647,6 +648,22 @@ function AppRoutes() {
           element={
             <Suspense fallback={<LoadingBar />}>
               <CprReport />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/cpr-dashboard"
+          element={
+            <Suspense fallback={<LoadingBar />}>
+              <CPRDashboard />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/cpr/dashboard"
+          element={
+            <Suspense fallback={<LoadingBar />}>
+              <CPRDashboard />
             </Suspense>
           }
         />

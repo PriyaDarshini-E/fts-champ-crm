@@ -766,13 +766,16 @@ const CPRForm = ({
 
     // Chapter Name & CPP Info
 
-    const chName =
+    const rawCh =
       data.chapter_name ||
       cpr.chapter?.chapter_name ||
       cpr.chapter_name ||
       data.chapter?.chapter_name ||
-      data.name_of_chapter;
-    if (chName && (!chapterName || !isEditMode)) {
+      data.name_of_chapter ||
+      (typeof data.chapter === "string" ? data.chapter : "") ||
+      (typeof cpr.chapter === "string" ? cpr.chapter : "");
+    const chName = typeof rawCh === "string" ? rawCh.trim() : (rawCh?.chapter_name || "");
+    if (chName) {
       setChapterName(chName);
     }
 
@@ -780,12 +783,16 @@ const CPRForm = ({
     // When creating (!isEditMode), take from getCPRReportDetails API.
     // When editing (isEditMode), take from GET /api/cpr-report/{id} and do NOT overwrite!
     if (!isEditMode) {
-      const cpName =
+      const rawCp =
         data.cpp_name ||
         cpr.name_of_cpp ||
         cpr.cpp_name ||
         data.name_of_cpp ||
-        data.chairman;
+        data.chairman ||
+        data.cpp_user ||
+        data.user_name ||
+        data.name;
+      const cpName = typeof rawCp === "string" ? rawCp.trim() : (rawCp?.name || rawCp?.cpp_name || "");
       if (cpName) {
         setCppName(cpName);
       }
@@ -2519,7 +2526,7 @@ const CPRForm = ({
 
   const handleSubmit = async () => {
     if (!financialYear) {
-      toast.error("Please select Financial Year");
+      toast.error("Please enter Financial Year");
       scrollToSection("section-report-details");
       return;
     }
@@ -2762,18 +2769,14 @@ const CPRForm = ({
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
                   Financial Year <span className="text-red-500">*</span>
                 </label>
-                <select
+                <input
+                  type="text"
                   value={financialYear}
-                  disabled={isView || isEditMode}
-                  onChange={(e) => setFinancialYear(e.target.value)}
-                  className="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed"
-                >
-                  {financialYearList.map((yr) => (
-                    <option key={yr} value={yr}>
-                      {yr}
-                    </option>
-                  ))}
-                </select>
+                  readOnly
+                  disabled
+                  className="w-full bg-slate-100 border border-slate-300 rounded-md px-3 py-2 text-xs font-medium text-slate-700 cursor-not-allowed focus:outline-none"
+                  placeholder="Financial Year"
+                />
               </div>
 
               {/* Chapter Name */}
@@ -2783,19 +2786,12 @@ const CPRForm = ({
                 </label>
                 <input
                   type="text"
-                  list="cpr-chapter-options"
                   value={chapterName}
-                  disabled={isView || isEditMode}
-                  readOnly={isView || isEditMode}
-                  onChange={(e) => setChapterName(e.target.value)}
-                  className="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed"
-                  placeholder="Select or enter Chapter"
+                  readOnly
+                  disabled
+                  className="w-full bg-slate-100 border border-slate-300 rounded-md px-3 py-2 text-xs font-medium text-slate-700 cursor-not-allowed focus:outline-none"
+                  placeholder="Chapter Name"
                 />
-                <datalist id="cpr-chapter-options">
-                  {chapterList.map((ch, idx) => (
-                    <option key={idx} value={ch} />
-                  ))}
-                </datalist>
               </div>
 
               {/* For the Month Of */}
@@ -2805,12 +2801,17 @@ const CPRForm = ({
                 </label>
                 <select
                   value={monthName}
-                  disabled={isView || isEditMode}
+                  disabled={isView || isSubmittedReport}
                   onChange={(e) => {
                     const m = e.target.value;
                     setMonthName(m);
                     const idx = FINANCIAL_MONTHS.indexOf(m);
                     if (idx !== -1) setMonthIndex(String(idx + 1));
+                    if (!m) {
+                      lastFetchedKeyRef.current = "";
+                    } else if (financialYear) {
+                      fetchCPRReportDetails(financialYear, m, true);
+                    }
                   }}
                   className="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed"
                 >
@@ -2830,21 +2831,12 @@ const CPRForm = ({
                 </label>
                 <input
                   type="text"
-                  list="cpr-cpp-options"
                   value={cppName}
-                  disabled={isView || isEditMode || isManualFieldDisabled}
-                  readOnly={isView || isEditMode || isManualFieldDisabled}
-                  onChange={(e) => setCppName(e.target.value)}
-                  className="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium disabled:bg-slate-100 disabled:text-slate-700 disabled:cursor-not-allowed"
-                  placeholder="Select or enter CPP name"
+                  readOnly
+                  disabled
+                  className="w-full bg-slate-100 border border-slate-300 rounded-md px-3 py-2 text-xs font-medium text-slate-700 cursor-not-allowed focus:outline-none"
+                  placeholder="Name of CPP"
                 />
-                <datalist id="cpr-cpp-options">
-                  <option value="testadmin" />
-                  <option value="President" />
-                  <option value="Secretary" />
-                  <option value="Treasurer" />
-                  {cppName && <option value={cppName} />}
-                </datalist>
               </div>
 
               {/* Submission Date */}

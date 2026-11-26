@@ -431,7 +431,8 @@ const LIMITED_MASTER_SETTINGS = {
 const useNavigationData = (
   userType,
   isTestMasterAdmin = false,
-  isTestUser = false
+  isTestUser = false,
+  isSuperAdmin = false
 ) => {
   return useMemo(() => {
     const permissions =
@@ -472,6 +473,19 @@ const useNavigationData = (
       }
     }
 
+    const cprReportConfig = {
+      ...NAVIGATION_CONFIG.MODULES.CPR_REPORT,
+      items: isSuperAdmin
+        ? [
+            {
+              title: "Dashboard",
+              url: "/cpr-dashboard",
+            },
+            ...NAVIGATION_CONFIG.MODULES.CPR_REPORT.items,
+          ]
+        : NAVIGATION_CONFIG.MODULES.CPR_REPORT.items,
+    };
+
     if (!navMain.some((item) => item?.title === "CPR Report")) {
       const eventIndex = navMain.findIndex(
         (item) => item?.title === "Event List"
@@ -479,12 +493,16 @@ const useNavigationData = (
       if (eventIndex !== -1) {
         navMain = [
           ...navMain.slice(0, eventIndex + 1),
-          NAVIGATION_CONFIG.MODULES.CPR_REPORT,
+          cprReportConfig,
           ...navMain.slice(eventIndex + 1),
         ];
       } else {
-        navMain = [...navMain, NAVIGATION_CONFIG.MODULES.CPR_REPORT];
+        navMain = [...navMain, cprReportConfig];
       }
+    } else {
+      navMain = navMain.map((item) =>
+        item?.title === "CPR Report" ? cprReportConfig : item
+      );
     }
 
     const navMainReport = buildNavItems(
@@ -493,7 +511,7 @@ const useNavigationData = (
     );
 
     return { navMain, navMainReport };
-  }, [userType, isTestMasterAdmin, isTestUser]);
+  }, [userType, isTestMasterAdmin, isTestUser, isSuperAdmin]);
 };
 
 const TEAMS_CONFIG = [
@@ -556,10 +574,25 @@ export function AppSidebar({ ...props }) {
     }
   );
 
+  const isSuperAdmin =
+    String(userType) === "3" ||
+    String(userType) === "5" ||
+    isTestMasterAdmin ||
+    [usernameL, emailL, nameL, loginUserL, localUser].some((val) => {
+      if (!val || typeof val !== "string") return false;
+      const clean = val.trim().toLowerCase();
+      return (
+        clean.includes("superadmin") ||
+        clean.includes("masteradmin") ||
+        clean.includes("testadmin")
+      );
+    });
+
   const { navMain, navMainReport } = useNavigationData(
     userType,
     isTestMasterAdmin,
-    isTestUser
+    isTestUser,
+    isSuperAdmin
   );
 
   const initialData = {
